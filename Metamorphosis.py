@@ -2,6 +2,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import Iconolatry
 import os
 import re
 from time import perf_counter
@@ -14,14 +15,17 @@ from math import ceil
 from subprocess import Popen, PIPE
 from zipfile import ZipFile
 from io import BytesIO
+from binascii import hexlify, unhexlify
+
 
 __name__        = "Metamorphosis"
-__version__     = "I (Egg)"
+__version__     = "II (Larva)"
 __license__     = "GPL-3.0 License"
 __author__      = u"Matteo ℱan <SystemRage@protonmail.com>"
 __copyright__   = "© Copyright 2018"
 __url__         = "https://github.com/SystemRage/Metamorphosis"
 __summary__     = "The Ultimate Cursor Converter"
+
 
 ## _________________________________________
 ##| Support to "repeat"/"end repeat" loops  |--------------------------------------------------------------------------------------------------------------
@@ -201,7 +205,11 @@ class SupportFunc(object):
                 SupportFunc.try_mkdir(OUTPUT_BASE_DIR)
                 SupportFunc.try_mkdir(ORIGINAL_DIR)
                 SupportFunc.try_mkdir(CFG_DIR)
-                ICON_DIR = None                
+                if platf == 'Windows':
+                        SupportFunc.try_mkdir(ICON_DIR)
+                else:
+                        ICON_DIR = None
+                
                 SCRIPT_LINE_PATTERN = re.compile(r'(\d+)(?:-(\d+))?(?:,(\d+))?')
                                 
         
@@ -317,7 +325,10 @@ class SupportFunc(object):
                         if script_data == None:
                                 pass
                         else:
-                                
+                                if platf == 'Windows':
+                                        ## Config file different for Windows.
+                                        cfg.write('%d\n%d\n' %(frame_count, frame_interval)) 
+                                        cfg.write('%d\n%d\n' %(mouse_x, mouse_y)) 
                                 for x in script_data:
                                         ## Note this examples:
                                         ## SCRIPT_LINE_PATTERN.match('2-5,30').groups() --> ('2', '5', '30')
@@ -340,7 +351,10 @@ class SupportFunc(object):
 
                                         ## Note that the frame index in the script is 1-based.
                                         if start_frame <= frame_count and end_frame <= frame_count:
-                                                if platf == 'Linux':
+                                                if platf == 'Windows':
+                                                        for i in range(start_frame, end_frame + step, step):
+                                                                cfg.write('%s/img%d-%d_%d.ico %d\n' %(ICON_DIR, image_index, cursor_status, i-1, interval))
+                                                elif platf == 'Linux':
                                                         for i in range(start_frame, end_frame + step, step):
                                                                 cfg.write('%d %d %d %s/img%d-%d_%d.png %d\n' %(xsize, mouse_x, mouse_y, ORIGINAL_DIR,
                                                                                                                image_index, cursor_status, i-1, interval))
@@ -360,18 +374,34 @@ class SupportFunc(object):
                 """ Create the sequence animation defined. """
                 global animation_type, frame_interval, frame_count, mouse_x, mouse_y, image_index, cursor_status, ICON_DIR, ORIGINAL_DIR
 
+                if platf == 'Windows':
+                        ## Config file different for Windows.
+                        cfg.write('%d\n%d\n' %(frame_count, frame_interval)) 
+                        cfg.write('%d\n%d\n' %(mouse_x, mouse_y))
                 if animation_type == 0:         # ANIMATION_TYPE_NONE
-                        if platf == 'Linux':
+                        if platf == 'Windows':
+                                for i in range(frame_count):
+                                        cfg.write('%s/img%d-%d_%d.ico %d\n' %(ICON_DIR, image_index, cursor_status,
+                                                                              i, (frame_interval if (i < frame_count - 1) else 1000000)))
+                        elif platf == 'Linux':
                                 for i in range(frame_count):
                                         cfg.write('%d %d %d %s/img%d-%d_%d.png %d\n' %(xsize, mouse_x, mouse_y, ORIGINAL_DIR, image_index, cursor_status,
                                                                                        i, (frame_interval if (i < frame_count-1) else 1000000)))
                 elif animation_type == 2:       # ANIMATION_TYPE_LOOP
-                        if platf == 'Linux':
+                        if platf == 'Windows':
+                                for i in range(frame_count):
+                                        cfg.write('%s/img%d-%d_%d.ico %d\n' %(ICON_DIR, image_index, cursor_status, i, frame_interval))
+                        elif platf == 'Linux':
                                 for i in range(frame_count):
                                         cfg.write('%d %d %d %s/img%d-%d_%d.png %d\n' %(xsize, mouse_x, mouse_y, ORIGINAL_DIR, image_index,
                                                                                        cursor_status, i, frame_interval))
                 elif animation_type == 3:       # ANIMATION_TYPE_ALTERNATE
-                        if platf == 'Linux':
+                        if platf == 'Windows':
+                                for i in range(frame_count):
+                                        cfg.write('%s/img%d-%d_%d.ico %d\n' %(ICON_DIR, image_index, cursor_status, i, frame_interval))
+                                for i in range(frame_count - 2, 0, -1):
+                                        cfg.write('%s/img%d-%d_%d.ico %d\n' %(ICON_DIR, image_index, cursor_status, i, frame_interval))
+                        elif platf == 'Linux':
                                 for i in range(frame_count):
                                         cfg.write('%d %d %d %s/img%d-%d_%d.png %d\n' %(xsize, mouse_x, mouse_y, ORIGINAL_DIR, image_index,
                                                                                        cursor_status, i, frame_interval))
@@ -671,7 +701,6 @@ Frame interval: %u\n Unknown_3: %u\n Animation type: %u\n Mouse position: (%u,%u
                                                 ## Write data in log file.
                                                 logger.write('\nImage #%d:\n\n Status: %u\n Frame count: %u\n Frame interval: %u\n Animation type: %u\n \
 Mouse position: (%u,%u)\n Script status: %u\n' %(image_index, cursor_status, frame_count, frame_interval, animation_type, mouse_x, mouse_y, script_status))
-
                                                              
                                         ## Extract strip image.
                                         if cursor_status in [1, 2]:
@@ -804,6 +833,280 @@ class X11(object):
                 rmtree(CFG_DIR, onerror = SupportFunc.remove_readonly)
                 rmtree(OUTPUT_BASE_DIR, onerror = SupportFunc.remove_readonly)                        
 
+
+## ___________________________
+##| Image conversion to Icon  |----------------------------------------------------------------------------------------------------------------------------
+##|___________________________| 
+##
+class Icon(object):
+                
+        def convert():
+                """" Ico convesion manager. """
+                global TMP_DIR, ORIGINAL_DIR
+                
+                listfiles = [file for file in os.listdir(ORIGINAL_DIR) if "_" in file]
+
+                with open(TMP_DIR + '/logconv.txt', 'a') as logger: 
+                        logger.write('\n<------>< Icons Creation ><------>\n')
+                        index = []
+                        for name_ima in listfiles:
+                                name_ico = name_ima.replace('.png','.ico')
+                                num = re.search('img(.*)-', name_ima).group(1)
+                                if num not in index:
+                                        index.append(num)
+                                        logger.write('\nConversion to Icon of set Images index: %s\n' %num)
+                                message = Icon.exec_ico( name_ico, name_ima )
+                                logger.write(' ' + message[0] + '\n')
+                                                               
+
+        def exec_ico( name_ico, name_ima ):
+                """ Execute conversion."""
+                global ICON_DIR, ORIGINAL_DIR
+                
+                path_icon = [ ICON_DIR + os.sep + name_ico ]
+                path_image = [ [ORIGINAL_DIR + os.sep + name_ima] ]
+                message = Iconolatry.WRITER().ToIco( False, path_image, path_icon )
+                
+                return message
+        
+
+## ____________________
+##| Conversion to ANI  |-----------------------------------------------------------------------------------------------------------------------------------
+##|____________________| 
+##
+class Ani(object):
+
+        def infile( themename, CURSOR_NAMEMAP ):
+                """ Create .inf file for Windows installation. """
+                global OUTPUT_DIR
+                ## Create install.inf file.
+                schemereg = ['pointer','help','work','busy','cross','text','hand','unavailiable','vert','horz','dgn1','dgn2','move','alternate','link']
+                schemecur = [ v[1] for k, v in CURSOR_NAMEMAP.items() if k in [i for j in (range(9), range(10,17,2), range(17,19)) for i in j] ]
+
+                stringcur = ''
+                for reg, cur in zip(schemereg, schemecur):
+                        if reg in ['unavailiable', 'alternate', 'link']:
+                                if reg == 'unavailiable':
+                                        stringcur += reg + '= "' + cur + '.ani"\n'
+                                elif reg == 'alternate':
+                                        stringcur += reg + '\t= "' + cur + '.ani"\n'
+                                elif reg == 'link':
+                                        stringcur += reg + '\t\t= "' + cur + '.ani"'
+                        else:
+                                stringcur += reg + '\t\t= "' + cur + '.ani"\n'
+                       
+                schemeinf = "; %s Cursors Pack installation file\n" %themename +\
+                                '; Right click on the file "Install.inf" and select "Install". Then in the Mouse control panel apply set cursors.\n\n' +\
+                                "[Version]\n" + "signature='$CHICAGO$'\n\n" +\
+                                "[DefaultInstall]\n" + "CopyFiles = Scheme.Cur, Scheme.Txt\n" + "AddReg    = Scheme.Reg\n\n" +\
+                                "[DestinationDirs]\n" + 'Scheme.Cur = 10,"%CUR_DIR%"\n' + 'Scheme.Txt = 10,"%CUR_DIR%"\n\n' +\
+                                "[Scheme.Reg]\n" + 'HKCU,"Control Panel\\Cursors\\Schemes","%SCHEME_NAME%",,"' +\
+                                ''.join('%10%\\%CUR_DIR%\\%{}%,'.format(val) for val in schemereg[0:len(schemereg)-1]) +\
+                                '%10%\\%CUR_DIR%\\%' + schemereg[-1] + '%"\n\n' +\
+                                "; --Common Information\n\n" +\
+                                "[Scheme.Cur]\n" + '"' + '.ani"\n"'.join(schemecur) + '.ani"\n\n' +\
+                                "[Strings]\n" + 'CUR_DIR\t\t= "Cursors\\%s"\n' %themename +\
+                                                'SCHEME_NAME\t= "%s"\n' %themename + stringcur
+
+                with open('%s/Install.inf' %OUTPUT_DIR, 'w') as ft:
+                        ft.write(schemeinf)
+                        
+        
+        def remove():
+                """ Delete used files after processing. """
+                global CFG_DIR, ORIGINAL_DIR, ICON_DIR
+                rmtree(ORIGINAL_DIR, onerror = SupportFunc.remove_readonly)
+                rmtree(CFG_DIR, onerror = SupportFunc.remove_readonly)
+                rmtree(ICON_DIR, onerror = SupportFunc.remove_readonly)
+                
+
+        def int_to_hex( value, byteorder = 'little', padbytes = 2 ):
+                """ Transform an integer into his hex representation (little or big endian).
+                    Usually padbytes = 1 (8-bit), 2 (16-bit), 4 (32-bit), 8 (64-bit). """
+                lung = (value.bit_length() + 7) // 8
+                ## Add padding, if needs.
+                pad = padbytes - lung
+                if pad < 0: pad = 0
+                ## Create hex representation.
+                a = value.to_bytes( lung + pad, byteorder = byteorder ) or b'\0'
+                hexstring = hexlify(a).decode('ascii')
+                return hexstring
+        
+
+        def change_hex( data, ini_pos_to_change, fin_pos_to_change, value_to_change ): 
+                """ Change hexadecimal values.
+                    If 'ini_pos_to_change' is equal to 'fin_pos_to_change' then 'value_to_change' is a single string ('xx'),
+                    if positions to change are more then one, 'values_to_change' is a list of strings ('xxyyzz' --> ['xx','yy','zz']). """
+                hex_ini = hexlify(data).decode('ascii')
+                s = list(hex_ini)
+                ## Modify digits.
+                if ini_pos_to_change == fin_pos_to_change:
+                        s[ini_pos_to_change] = value_to_change
+                elif ini_pos_to_change < fin_pos_to_change:
+                        s[ini_pos_to_change : fin_pos_to_change] = list(value_to_change)
+                        
+                hex_mod = unhexlify(''.join(s))
+                return hex_mod
+        
+        
+        def write_icon( fileread, size, f_ani, hotx, hoty ):
+                """ Write icon data with modifications into ANI file. """
+                with open(fileread, 'rb') as f_icon:
+                        for line, _ in enumerate(range(0, size, 16)):
+                                data = f_icon.read(16)
+                                ## Modifications into icon files to transform ICO into CUR.
+                                if line == 0:
+                                        ## idType modification.
+                                        data = Ani.change_hex( data, ini_pos_to_change = 4, fin_pos_to_change = 8, value_to_change = '0200' )
+                                        ## hotspotX modification.
+                                        data = Ani.change_hex( data, ini_pos_to_change = 20, fin_pos_to_change = 24, value_to_change = hotx )
+                                        ## hotspotY modification.
+                                        data = Ani.change_hex( data, ini_pos_to_change = 24, fin_pos_to_change = 28, value_to_change = hoty )
+                                ## Write icon data into ani file.
+                                f_ani.write(data)
+                return f_ani
+        
+
+        def write_ani( filewrite, header_ani, config_data, header_icon, hotspotX, hotspotY ):
+                """ Write ANI file. """
+                with open(filewrite, 'wb+') as f_ani:
+                        ## Write ani header's into ani file.
+                        f_ani.write( unhexlify(header_ani) )
+                        ## Write 'icon' identifier with his size identifier and data,
+                        ## for all icons to put into ani file.
+                        for element in config_data[4::]:
+                                path_icon = element.split(' ')[0]
+                                iconSize = os.path.getsize(path_icon)
+                                hex_iconSize = Ani.int_to_hex( iconSize, byteorder = 'little', padbytes = 4 )
+                                f_ani.write( unhexlify(header_icon + hex_iconSize) )
+                                f_ani = Ani.write_icon( path_icon, iconSize, f_ani, hotspotX, hotspotY )
+                                
+                        ## Fix riffSize with the right value after writing ani file.
+                        riffSize = f_ani.tell() - 8                                
+                        f_ani.seek(4)     
+                        hex_riffSize = Ani.int_to_hex( riffSize, byteorder = 'little', padbytes = 4 )
+                        f_ani.write( unhexlify(hex_riffSize) )
+                        ## Fix listSize with the right value after writing all icons into ani file.
+                        f_ani.seek(0)
+                        offset = re.search(b'fram', f_ani.read()).start() - 4
+                        listSize = riffSize - (offset - 4)
+                        hex_listSize = Ani.int_to_hex( listSize, byteorder = 'little', padbytes = 4 )
+                        f_ani.seek(offset)
+                        f_ani.write( unhexlify(hex_listSize) )
+                       
+                        
+        def convert( w_res, h_res ):
+                """ Create cursor ANI files."""
+                global CFG_DIR, OUTPUT_DIR, ICON_DIR, theme_name
+
+                CURSOR_NAMEMAP = SupportFunc.namecurs()
+                ## Open logging file.
+                logger = open('%s/%s' %(TMP_DIR, 'logconv.txt'), 'a', encoding = 'utf-8')
+                logger.write('\n<------>< ANI Cursors Creation ><------>\n\n')
+                                             
+                ## Define global data for anih.
+                anihSize = cbSize =     Ani.int_to_hex( 36, byteorder = 'little', padbytes = 4 )
+                iWidth =                Ani.int_to_hex( int(w_res), byteorder = 'little', padbytes = 4 )
+                iHeight =               Ani.int_to_hex( int(h_res), byteorder = 'little', padbytes = 4 )
+                iBitCount =             Ani.int_to_hex( 32, byteorder = 'little', padbytes = 4 )
+                nPlanes =               Ani.int_to_hex( 1, byteorder = 'little', padbytes = 4 )
+                bfAttributes =          Ani.int_to_hex( 3, byteorder = 'little', padbytes = 4 )
+
+                ## Define data for IART.                
+                iart = b'*Converted by Metamorphosis, Copyright 2018'
+                iart = hexlify(iart).decode('ascii') + '00'
+                iart_int = int(len(iart)/2)
+                iartSize = Ani.int_to_hex( iart_int, byteorder = 'little', padbytes = 4 )
+
+                ## Define hex representation of common tags.
+                ## riffSize and listSize are initially put to zero.
+                header_dict = {'RIFF':'52494646',       'riffSize':'00000000',  'ACON':'41434f4e',      'anih':'616e6968',
+                               'rate':'72617465',       'seq ':'73657120',
+                               'INFO':'494e464f',       'INAM':'494e414d',      'IART':'49415254',
+                               'LIST':'4c495354',       'listSize':'00000000',  'fram':'6672616d',      'icon':'69636f6e'
+                              }
+
+                ## Get parameters using config files.
+                cfgs = os.listdir(CFG_DIR)
+
+                for cfg in cfgs:
+                        with open(CFG_DIR + '/%s' %cfg, 'r') as f_cfg:  
+                                config_data = f_cfg.readlines()
+                        config_data = [ line.replace('\n','') for line in config_data]
+
+                        ## Define name and path of ani file.
+                        im, st = re.search('img(.*)-(.*).cfg', cfg).groups()
+                        name_ani = CURSOR_NAMEMAP[int(im)][1]
+                        if int(st) == 2:
+                                name_ani += '_pressed'
+                                
+                        filewrite = OUTPUT_DIR + os.sep + name_ani + '.ani'
+                        
+                        ## Define remaining data for anih.
+                        nFrames = nSteps =      Ani.int_to_hex( int(config_data[0]), byteorder = 'little', padbytes = 4 )
+                        ## Convert rate from ms to jiffies.
+                        iDispRate = int(0.5 * ceil(2.0 * (int(config_data[1]) / (1000/60))))
+                        iDispRate =             Ani.int_to_hex( iDispRate, byteorder = 'little', padbytes = 4 )
+                        hotspotX =              Ani.int_to_hex( int(config_data[2]), byteorder = 'little', padbytes = 2 )
+                        hotspotY =              Ani.int_to_hex( int(config_data[3]), byteorder = 'little', padbytes = 2 )
+
+                        ## Define data for INAM.
+                        inam = theme_name + '-' + name_ani
+                       
+                        if len(inam) % 2 != 0:
+                                inam = hexlify(bytes(inam, 'utf-8')).decode('ascii') + '00'
+                        else:
+                                inam = hexlify(bytes(inam, 'utf-8')).decode('ascii') + '0000'
+                        
+                        inam_int = int(len(inam)/2)
+                        inamSize = Ani.int_to_hex( inam_int, byteorder = 'little', padbytes = 4 )
+
+                        ## Define size of all tag INFO.
+                        ## header_dict['IART'] + iartSize = 4 + 4 = 8
+                        ## header_dict['INFO'] + header_dict['INAM'] + inamSize = 4 + 4 + 4 = 12
+                        infoSize = inam_int + iart_int + 8 + 12
+                        infoSize = Ani.int_to_hex( infoSize, byteorder = 'little', padbytes = 4 )
+            
+                        ## Start to construct ANI Header's.
+                        header_ani =  header_dict['RIFF']       + header_dict['riffSize']       + header_dict['ACON']
+                        header_ani += header_dict['LIST']       + infoSize
+                        header_ani += header_dict['INFO']        
+                        header_ani += header_dict['INAM']       + inamSize                      + inam
+                        header_ani += header_dict['IART']       + iartSize                      + iart                              
+                        header_ani += header_dict['anih']
+                        header_ani += anihSize                  + cbSize                        + nFrames               + nSteps
+                        header_ani += iWidth                    + iHeight                       + iBitCount             + nPlanes
+                        header_ani += iDispRate                 + bfAttributes
+
+                        ## Continue to construct ANI Header's with tag 'rate' and 'seq '.
+                        seqSize = rateSize = Ani.int_to_hex( int(config_data[0]) * 4, byteorder = 'little', padbytes = 4 )
+                        header_ani_rate = header_dict['rate']    + rateSize
+                        header_ani_seq =  header_dict['seq ']    + seqSize
+                                        
+                        for element in config_data[4::]:
+                                path_icon, framrate = element.split(' ')
+                                seq = re.search('_(.*).ico', path_icon.split('/')[-1]).group(1)
+                                ## Convert rate from ms to jiffies.
+                                framrate = int(0.5 * ceil(2.0 * (int(framrate) / (1000/60))))
+                                header_ani_rate += Ani.int_to_hex( framrate, byteorder = 'little', padbytes = 4 )
+                                header_ani_seq +=  Ani.int_to_hex( int(seq), byteorder = 'little', padbytes = 4 )       
+
+                        header_ani +=   header_ani_rate + header_ani_seq
+
+                        ## Continue to construct ANI Header's with tag 'icon'.
+                        header_ani +=   header_dict['LIST']     + header_dict['listSize']       + header_dict['fram']
+                        
+                        header_icon =   header_dict['icon'] 
+
+                        ## Do process.
+                        Ani.write_ani( filewrite, header_ani, config_data, header_icon, hotspotX, hotspotY )
+                        logger.write(' %s ----> Done !!\n' %filewrite)
+                        
+                logger.close()
+                Ani.infile( theme_name, CURSOR_NAMEMAP )
+                Ani.remove()
+                
+
 ## _______
 ##| Main  |------------------------------------------------------------------------------------------------------------------------------------------------
 ##|_______|
@@ -813,10 +1116,11 @@ if __name__ == 'Metamorphosis':
         global TMP_DIR, ROOT_DIR
 
         ## Get platform.
-        platf = SupportFunc.choice( 'Select OS of cursors:', ['Linux'] )
+        platf = SupportFunc.choice( 'Select OS of cursors:', ['Linux','Windows'] )
 
         ## Path root.
         ## Linux -->   /home/User/Metamorphosis
+        ## Windows --> C:\\Users\\User\\Metamorphosis
         ROOT_DIR = os.path.normpath(os.path.expanduser('~'+ os.sep + 'Metamorphosis'))
         if ROOT_DIR.startswith('\\'):
                 ROOT_DIR = 'C:' + ROOT_DIR
@@ -842,6 +1146,10 @@ if __name__ == 'Metamorphosis':
                 elif path_file.lower().endswith('.curxptheme'):
                         Cursor.convert_XP( path_file, nproc, width, height, platf )
 
+                if platf == 'Windows':
+                        Icon.convert()
+                        Ani.convert( width, height )
+               
                 ## Get processing time.
                 toc = perf_counter()
                 minutes, seconds = divmod(ceil(toc - tic), 60)
@@ -851,3 +1159,4 @@ if __name__ == 'Metamorphosis':
                 nproc += 1
                 
 ##---------------------------------------------------------------------------------------------------------------------------------------------------------        
+   
