@@ -1,3 +1,13 @@
+## Metamorphosis III (Chrysalis)
+* Added Windows ANI / CUR cursors conversion to Linux X11 cursors. (Implemented functions to collect INAM, IART, RATE, SEQ values)
+* Improved auxiliary directories creation.
+* Packs cursors converted to ANI (*.zip*).
+* Implemented image operations manager and script / animation *.cfg* files manager.
+* Activated resizing and colorization options.
+* Made *.log* file prettier.
+* Improved user interface.
+* Improved temporary files deletion.
+ 
 ## Metamorphosis II (Larva)
 * Added CursorFX / CursorXP conversion to Windows ANI cursors.
 * Implemented *Iconolatry* for *.png* conversion to *.ico* ( intermediate step for *.ani* conversion ).
@@ -5,7 +15,7 @@
 
 ## Metamorphosis I (Egg) 
 * CursorFX / CursorXP conversion to Linux X11 cursors.
-* Packs cursors converted to X11 (*tar.gz*).
+* Packs cursors converted to X11 (*.tar.gz*).
 * Support to default animations or animations with scripts with "repeat" / "end repeat" loops.
 * Info *.log* file creation.
 * Setup resizing option.
