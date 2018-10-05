@@ -7,7 +7,10 @@
 > *The Ultimate Cursor Converter*
 
 ## Why
-A tool that didn't exist is there now, for Linux and Windows users.
+After numerous researches, i figured that it doesn't exist a robust tool performing cursor conversions 
+between the various formats.
+
+So inspired by [cfx2xc.py](https://github.com/coolwanglu/cfx2xc/blob/master/cfx2xc.py) and [sd2xc.pl](https://github.com/ludios/sd2xc/blob/master/sd2xc.pl), i have decided to create one very cool, working with Linux and Windows.
 
 ## Requirements
  - *Python 3.5+*,
@@ -27,22 +30,20 @@ A tool that didn't exist is there now, for Linux and Windows users.
     * Support for clicked cursors ( only extraction ).
 
 ## Usage
-For Linux users:
-Create a folder named *Metamorphosis* under *~/home/User*. Then under *~/home/User/Metamorphosis*
-create a folder named *curs2conv* where put all your cursors to convert.
-Now run *Metamorphosis.py*.
+For Linux users, create this path: *~/home/User/Metamorphosis/curs2conv*.
 
-For Windows users:
-Create a folder named *Metamorphosis* under *C:\\Users\\User*. Then under *C:\\Users\\User\\Metamorphosis*
-create a folder named *curs2conv* where put all your cursors to convert.
-Now run *Metamorphosis.py*.
+For Windows users, create this path: *C:\\Users\\User\\Metamorphosis\\curs2conv*.
+
+Put your cursors in *curs2conv* folder as shown.
+
+![input](https://user-images.githubusercontent.com/25354386/46557884-b6877300-c8eb-11e8-9908-c5873c0e5b93.png)
+
+Now run *Metamorphosis.py*, then get cursors converted in *conversion* folder.
+
+Enjoy !
 
 ## Notes
 Do NOT distribute the converted themes without the permission of the original author.
-
-## References
-- [cfx2xc.py](https://github.com/coolwanglu/cfx2xc/blob/master/cfx2xc.py)
-- [sd2xc.pl](https://github.com/ludios/sd2xc/blob/master/sd2xc.pl)
 
 ## License
  [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) ©  Matteo ℱan
