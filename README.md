@@ -10,7 +10,7 @@
 After numerous researches, i figured that it doesn't exist a robust tool performing cursor conversions 
 between the various formats.
 
-So inspired by [cfx2xc.py](https://github.com/coolwanglu/cfx2xc/blob/master/cfx2xc.py) and [sd2xc.pl](https://github.com/ludios/sd2xc/blob/master/sd2xc.pl), i have decided to create one very cool, working with Linux and Windows.
+So inspired by [cfx2xc.py](https://github.com/coolwanglu/cfx2xc/blob/master/cfx2xc.py) and [sd2xc.pl](https://github.com/ludios/sd2xc/blob/master/sd2xc.pl), i have decided to create one very cool that works with Windows and Linux.
 
 ## Requirements
  - *Python 3.5+*,
@@ -27,7 +27,10 @@ So inspired by [cfx2xc.py](https://github.com/coolwanglu/cfx2xc/blob/master/cfx2
     * Support for default animations or animations with scripts.
          * NEW !!! Conversion "repeat" / "end repeat" loops in scripts available.
     * Allows resizing cursors.
+    * Changes color of cursors.
     * Support for clicked cursors ( only extraction ).
+    * Creation of *.inf* file for Windows installations.
+* Direct conversion of Windows CUR & ANI cursors to Linux X11 cursors.
 
 ## Usage
 For Linux users, create this path: *~/home/User/Metamorphosis/curs2conv*.
@@ -39,6 +42,10 @@ Put your cursors in *curs2conv* folder as shown.
 ![input](https://user-images.githubusercontent.com/25354386/46557884-b6877300-c8eb-11e8-9908-c5873c0e5b93.png)
 
 Now run *Metamorphosis.py*, then get cursors converted in *conversion* folder.
+
+![output_lin](https://user-images.githubusercontent.com/25354386/46561231-159eb500-c8f7-11e8-89a3-1df734157de1.png)
+
+![output_win](https://user-images.githubusercontent.com/25354386/46561248-23543a80-c8f7-11e8-84cf-c722b588984c.png)
 
 Enjoy !
 
