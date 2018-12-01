@@ -1,3 +1,6 @@
+## Metamorphosis IV (Chameleon)
+* Added Linux X11 cursors conversion to Windows ANI cursors.
+
 ## Metamorphosis III (Chrysalis)
 * Added Windows ANI / CUR cursors conversion to Linux X11 cursors. (Implemented functions to collect INAM, IART, RATE, SEQ values)
 * Improved auxiliary directories creation.
@@ -19,4 +22,3 @@
 * Support to default animations or animations with scripts with "repeat" / "end repeat" loops.
 * Info *.log* file creation.
 * Setup resizing option.
-    
