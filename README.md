@@ -31,6 +31,7 @@ So inspired by [cfx2xc.py](https://github.com/coolwanglu/cfx2xc/blob/master/cfx2
     * Support for clicked cursors ( only extraction ).
     * Creation of *.inf* file for Windows installations.
 * Direct conversion of Windows CUR & ANI cursors to Linux X11 cursors.
+* Direct conversion of Linux X11 cursors to Windows ANI cursors.
 
 ## Usage
 For Linux users, create this path: *~/home/User/Metamorphosis/curs2conv*.
