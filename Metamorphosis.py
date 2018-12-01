@@ -22,7 +22,7 @@ from shutil import make_archive
 from functools import wraps
 
 __name__        = "Metamorphosis"
-__version__     = "III (Chrysalis)"
+__version__     = "IV (Chameleon)"
 __license__     = "GPL-3.0 License"
 __author__      = u"Matteo ℱan <SystemRage@protonmail.com>"
 __copyright__   = "© Copyright 2018"
@@ -831,7 +831,7 @@ class X11Cursor(object):
                         if err == '':
                                 err = 'xcursorgen not installed or generic process error'
                         logger.write(" \n Can't convert cursor #%d by xcursorgen --> %s\n" %(image_index, err))
-
+                                                    
                 for link in links:
                         try:
                             os.symlink(outfilename, '%s/%s' %(OUTPUT_CURS_DIR, link))
@@ -1356,6 +1356,134 @@ Mouse position: (%u,%u)\n' %(image_index, cursor_status, image_width, image_heig
                 return comment_list
 
 
+        def convert_X11_to_ANI( pathpointer, N, folder, w_res, h_res, color, used_list, comment_list ):
+                """ Gets PNGs from X11 cursor, creates ICOs and then produces ANI cursor. """
+                ## https://www.x.org/releases/X11R7.7/doc/man/man3/Xcursor.3.xhtml
+
+                global ORIGINAL_DIR, CFG_DIR, ICOCUR_DIR, CURSOR_NAMEMAP, logger
+                global mouse_x, mouse_y, image_index, cursor_status, frame_count
+
+                ## Create directories.
+                Auxiliary.setup( N )
+
+                ## Creation subdirectories under "targets".
+                Auxiliary.folder_2lev( folder )
+                
+                ## Get index of pointer.
+                name = pathpointer.split(os.sep)[-1]
+                try :
+                        image_index = [k for k, v in CURSOR_NAMEMAP.items() if name == v[2] or name in v[3]][0]
+                        ## To convert only one X11 cursor for type.
+                        if image_index in used_list:
+                                return used_list, comment_list
+                        else:
+                                used_list.append(image_index)
+                except:
+                        logger.write('\n !!! Cursor "%s" Skipped --> Have not standard Linux name.\n' %name)
+                        logger.close()
+                        return used_list, comment_list
+                
+                                               
+                ## Read data from file.
+                with open(pathpointer, 'rb') as file:
+                        data = file.read()
+
+                cursor_status = 1  # imposed always 1, not exist status pressed for x11.
+                                
+                ## magic / this_header_size / version / ntocs.
+                if data[0:4] == b'Xcur':
+                        vers, ntocs = unpack_from('<2L', data[8:16])
+                        frame_count = 1   ## Imposed for resize images of ANIs one by one.
+                        
+                        ## list_of_tocs -->    type     |               subtype                     |        position          |  
+                        ##                  0xfffe0001  | { 1 (COPYRIGHT), 2 (LICENSE), 3 (OTHER) } |  absolute byte position  |                 
+                        ##                  0xfffd0002  |           nominal dimension               |     of table in file     |
+                        bytpos_ima, bytpos_com = ([] for _ in range(2))
+                        for frame in range(ntocs):
+                                identf = data[16 + frame*12 : 20 + frame*12]
+                                toget = data[24 + frame*12 : 28 + frame*12]
+                                
+                                if identf == b'\x02\x00\xfd\xff':
+                                        bytpos_ima.append(unpack_from('<L', toget)[0])
+                                elif identf == b'\x01\x00\xfe\xff':
+                                        bytpos_com.append(unpack_from('<L', toget)[0])
+                        
+                        ## chunks --> common header fields:
+                        ## header (bytes) |    type    |              subtype                      | version |
+                        ##       20       | 0xfffe0001 | { 1 (COPYRIGHT), 2 (LICENSE), 3 (OTHER) } |    1    |
+                        ##       36       | 0xfffd0002 |         nominal dimension                 |    1    |
+                                        
+                        ## chunks --> additional type-specific fields:
+                        ##
+                        ##                    |           length          |       string           |
+                        ## comment(0xfffe0001)|  byte length UTF-8 string | byte list UTF-8 string |
+                        ##                
+                        ##                    |    width    |    height   |     xhot   |   yhot     | delay  | pixels |
+                        ## image  (0xfffd0002)|   4bytes    |    4bytes   |    4bytes  |  4bytes    | 4bytes | 8bytes |
+                        ##                    | (max 0x7fff)| (max 0x7fff)| (max width)|(max height)| (ms)   | (ARGB) |
+
+                        ## Comment.
+                        dictsubtype = {1:'COPYRIGHT: ', 2:'LICENSE: ', 3:'OTHER: '}
+                        comment = ''
+                        for pos in bytpos_com:
+                                identf = data[pos + 4 : pos + 8]
+                                if identf == b'\x01\x00\xfe\xff':
+                                        subtype, = unpack_from('<L', data[pos + 8 : pos + 12])
+                                        if subtype in dictsubtype.keys():
+                                                partial_comment = dictsubtype[subtype]
+                                                
+                                        lung, = unpack_from('<L', data[pos + 16 : pos + 20])
+                                        partial_comment += str(data[pos + 20 : pos + 20 + lung], 'utf-8')
+                                comment += partial_comment + ','
+                                
+                        ## Image.
+                        for ii, pos in enumerate(bytpos_ima):
+                                identf = data[pos + 4 : pos + 8]
+                                if identf == b'\x02\x00\xfd\xff':
+                                        image_width, image_height, mouse_x, mouse_y, frame_interval_ms = unpack_from('<5L', data[pos + 16 : pos + 36])
+                                        animation_type = (0 if frame_interval_ms > 10000 else 2)
+                                        frame_interval = int(0.5 * ceil(2.0 * (int(frame_interval_ms) / (1000/60)))) ## from ms to jiffies.
+                                
+                                try:
+                                        ima = Image.frombytes('RGBA', (image_width, image_height), data[pos + 36 : pos[ii + 1]], 'raw', 'BGRA', 0, 1)
+                                except:
+                                        ## To get last figure.
+                                        ima = Image.frombytes('RGBA', (image_width, image_height), data[pos + 36 : len(data)], 'raw', 'BGRA', 0, 1)
+
+                                ## Eventually resize.
+                                ima = Auxiliary.resize_make( w_res, h_res, [ima] )
+                                ## Eventually change color.
+                                ima = Auxiliary.colorize( color, ima[0] )
+                                ## Save images (conversion x11 --> .png).
+                                ima.save('%s/img%d-%d_%d.png' %(ORIGINAL_DIR, image_index, cursor_status, ii), 'PNG')
+
+                              
+                        ## Create .conf files.
+                        with open('%s/img%d-%d.cfg' %(CFG_DIR, image_index, cursor_status), 'a') as cfg:
+                                cfg.write('%d\n%d\n' %(frame_count, frame_interval))
+                                cfg.write('%d\n%d\n' %(mouse_x, mouse_y))
+                                for ii in range(len(bytpos_ima)):
+                                        cfg.write('%s/img%d-%d_%d.ico %d\n' %(ICOCUR_DIR, image_index, cursor_status, ii, frame_interval))
+                                        
+                ## Assign correct value of frame count.                        
+                frame_count = len(bytpos_ima)                             
+                ## Get x11's total comment.
+                if comment not in comment_list:
+                        comment_list.append(comment)
+                        
+                ## Write into log file general info.
+                logger.write('\nImage #%d:\n\n Status: %u\n Width: %u\n Height: %u\n Frame count: %u\n Frame interval: %u\n Animation type: %u\n \
+Mouse position: (%u,%u)\n' %(image_index, cursor_status, image_width, image_height, frame_count, frame_interval_ms, animation_type, mouse_x, mouse_y))
+
+                ## Conversion .png --> .ico --> .ani
+                Icon.convert( )
+                ANICursor.convert_ANI( image_width, image_height, folder )
+                ## Partial clean.
+                Main.clean_all( remove_all = False )
+             
+                return used_list, comment_list
+
+
 ## _______
 ##| Main  |------------------------------------------------------------------------------------------------------------------------------------------------
 ##|_______|
@@ -1391,7 +1519,6 @@ class Main(object):
                 if remove_all:
                         rmtree(OUTPUT_BASE_DIR, onerror = Auxiliary.remove_readonly)
                 
-
         def process_setup( ):
                 """ Creates initial parameters for process. """
                 nproc, old_nproc, nproc_sub, old_nproc_sub = (0 for _ in range(4))
@@ -1576,8 +1703,20 @@ class Main(object):
                                                 times_sub.append(ceil(toc - tic))
                                                 
                                 else:
-                                        pass
-
+                                        is_folder = (False, True)
+                                        old_folder, nproc, old_nproc, nproc_sub, old_nproc_sub, flag_compl = Main.process_folder( filename, folder, old_folder,
+                                                                                                                                  nproc, old_nproc,
+                                                                                                                                  nproc_sub, old_nproc_sub,
+                                                                                                                                  is_folder, platf_distrib )
+                                        flag_glb.append(flag_compl)
+                                        if platf_distrib == 'Windows' and flag_compl:
+                                                float_proc = float('%d.%d' %(old_nproc, old_nproc_sub))
+                                                used_list, comment_list = Utility.convert_X11_to_ANI( path_file, float_proc, folder,
+                                                                                                      width, height, color,
+                                                                                                      used_list, comment_list )
+                                                ## Get sub-process times.
+                                                toc = perf_counter()
+                                                times_sub.append(ceil(toc - tic))
                                                 
 
                                 ## Get processing time (no folders).   
@@ -1588,7 +1727,10 @@ class Main(object):
                                         nproc += 1
 
                         ## Complete process (folders).                
-                        if is_folder == (True, False) and (True in flag_glb):
+                        if is_folder == (False, True) and (True in flag_glb):
+                                ANICursor.pack_ANI( folder, '\n'.join(comment_list) )
+                                Main.clean_all( remove_all = True )
+                        elif is_folder == (True, False) and (True in flag_glb):
                                 X11Cursor.pack_X11( folder, '\n'.join(comment_list) )
                                 Main.clean_all( remove_all = True )
 
