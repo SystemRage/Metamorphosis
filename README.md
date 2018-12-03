@@ -7,10 +7,10 @@
 > *The Ultimate Cursor Converter*
 
 ## Why
-After numerous researches, i figured that it doesn't exist a robust tool performing cursor conversions 
+After numerous researches, i figured that it doesn't exist a robust tool performing cursors conversions 
 between the various formats.
 
-So inspired by [cfx2xc.py](https://github.com/coolwanglu/cfx2xc/blob/master/cfx2xc.py) and [sd2xc.pl](https://github.com/ludios/sd2xc/blob/master/sd2xc.pl), i have decided to create one very cool that works with Windows and Linux.
+So inspired by [cfx2xc.py](https://github.com/coolwanglu/cfx2xc/blob/master/cfx2xc.py) and [sd2xc.pl](https://github.com/ludios/sd2xc/blob/master/sd2xc.pl), i decided to create one very cool that works with Windows and Linux.
 
 ## Requirements
  - *Python 3.5+*,
