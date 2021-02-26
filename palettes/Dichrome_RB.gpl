@@ -1,0 +1,104 @@
+GIMP Palette
+Name: TheOuterLinux - Dichrome-RedBlue
+Columns: 10
+#
+24	0	24	Very dark brown
+8	0	8	Black
+24	0	8	Very dark brown
+8	0	24	Black
+48	0	16	Dark maroon
+16	0	47	Midnight
+48	0	47	Eggplant
+80	0	16	Dried blood
+112	0	16	Reddy brown
+80	0	47	Plum
+112	0	47	Burgundy
+16	0	79	Dark indigo
+48	0	79	Dark indigo
+16	0	111	Deep blue
+48	0	111	Indigo
+80	0	79	Plum purple
+112	0	79	Velvet
+80	0	111	Royal purple
+112	0	111	Darkish purple
+152	0	16	Carmine
+135	0	8	Crimson
+135	0	24	Crimson
+176	0	16	Darkish red
+152	0	48	Rouge
+135	0	40	Wine red
+135	0	55	Red wine
+176	0	47	Rose red
+205	0	18	Scarlet
+215	0	8	Orangey red
+242	0	18	Red
+232	0	8	Red
+207	0	47	Cherry
+239	0	47	Neon red
+152	0	79	Mulberry
+135	0	71	Red purple
+135	0	88	Velvet
+176	0	79	Purplish red
+152	0	111	Red violet
+135	0	103	Rich purple
+135	0	120	Darkish purple
+176	0	111	Red violet
+207	0	79	Ruby
+239	0	79	Pink red
+207	0	111	Deep pink
+239	0	111	Dark hot pink
+16	0	152	Indigo blue
+8	0	135	Royal
+24	0	135	Royal
+48	0	152	Indigo blue
+40	0	135	Indigo
+56	0	135	Indigo
+16	0	176	Ultramarine
+48	0	176	Ultramarine
+80	0	152	Indigo
+71	0	135	Indigo
+88	0	135	Purple
+112	0	152	Purple
+103	0	135	Purple
+120	0	135	Purple
+80	0	176	Purple/blue
+112	0	176	Purple/blue
+18	0	205	True blue
+8	0	215	Ultramarine blue
+48	0	207	True blue
+18	0	242	Strong blue
+8	0	232	Pure blue
+48	0	239	Pure blue
+80	0	207	Violet blue
+112	0	207	Violet blue
+80	0	239	Blue/purple
+112	0	239	Blue violet
+152	0	152	Barney purple
+135	0	135	Barney purple
+151	0	135	Barney purple
+135	0	151	Purple
+176	0	152	Barney purple
+168	0	135	Barney purple
+184	0	135	Magenta
+152	0	176	Barney
+135	0	168	Barney
+135	0	184	Vibrant purple
+176	0	176	Barney
+207	0	152	Bright pink
+199	0	135	Magenta
+215	0	135	Barbie pink
+242	0	146	Neon pink
+232	0	135	Barbie pink
+207	0	176	Hot magenta
+239	0	176	Bright pink
+152	0	207	Vibrant purple
+135	0	199	Vibrant purple
+135	0	215	Violet
+176	0	207	Vibrant purple
+146	0	242	Vivid purple
+135	0	232	Violet
+176	0	239	Neon purple
+207	0	207	Purple/pink
+239	0	207	Hot magenta
+207	0	239	Hot purple
+239	0	239	Pink/purple

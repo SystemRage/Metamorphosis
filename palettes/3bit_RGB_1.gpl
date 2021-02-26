@@ -1,0 +1,12 @@
+GIMP Palette
+Name: BBCMicro_8Colors_GIMP_ColorPalette.gpl
+Columns: 1
+#
+0	0	0	Black
+255	0	0	Fire engine red ~
+0	255	0	Fluro green
+255	255	0	Yellow ~
+0	0	255	Primary blue ~
+255	0	255	Pink/purple ~
+0	255	255	Cyan
+255	255	255	White

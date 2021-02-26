@@ -1,0 +1,70 @@
+GIMP Palette
+Name: TheOuterLinux - 6-bit RGB
+Columns: 4
+#
+0	0	0	Black
+85	85	85	Charcoal grey 
+170	170	170	Silver 
+255	255	255	White
+0	85	0	Forest 
+0	170	0	Green 
+0	255	0	Fluro green
+0	0	85	Dark blue 
+0	85	85	Dark teal 
+0	170	85	Emerald 
+0	255	85	Bright light green 
+0	0	170	Royal blue 
+0	85	170	Cobalt 
+0	170	170	Greenish blue 
+0	255	170	Bright sea green 
+0	0	255	Primary blue 
+0	85	255	Electric blue 
+0	170	255	Azure 
+0	255	255	Cyan
+85	0	0	Dried blood 
+85	85	0	Greenish brown 
+85	170	0	Leaf green 
+85	255	0	Bright lime green 
+85	0	85	Plum purple 
+85	85	85	Charcoal grey 
+85	170	85	Dark pastel green 
+85	255	85	Light neon green 
+85	0	170	Indigo blue 
+85	85	170	Blueberry 
+85	170	170	Sea 
+85	255	170	Light green blue 
+85	0	255	Strong blue 
+85	85	255	Electric blue 
+85	170	255	Dark sky blue 
+85	255	255	Bright cyan 
+170	0	0	Darkish red 
+170	85	0	Orangish brown 
+170	170	0	Puke 
+170	255	0	Electric lime 
+170	0	85	Violet red 
+170	85	85	Dirty pink 
+170	170	85	Khaki 
+170	255	85	Kiwi 
+170	0	170	Barney 
+170	85	170	Orchid 
+170	170	170	Silver 
+170	255	170	Light pastel green 
+170	0	255	Bright violet 
+170	85	255	Lighter purple 
+170	170	255	Periwinkle blue 
+170	255	255	Light cyan 
+255	0	0	Fire engine red 
+255	85	0	Bright orange 
+255	170	0	Yellowish orange 
+255	255	0	Yellow 
+255	0	85	Pink red 
+255	85	85	Grapefruit 
+255	170	85	Pale orange 
+255	255	85	Lemon 
+255	0	170	Shocking pink 
+255	85	170	Barbie pink 
+255	170	170	Dusty pink 
+255	255	170	Parchment 
+255	0	255	Pink/purple 
+255	85	255	Violet pink 
+255	170	255	Lavender pink 

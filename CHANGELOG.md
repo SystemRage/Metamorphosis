@@ -1,3 +1,10 @@
+## Metamorphosis V (Reborn)
+* Totally rewritten with well done classes and code very cleaned up.
+* Improved input managing.
+* Created CLI.
+* Implements last *Iconolatry* version that works on all standard depths
+  and converts directly to *.cur*.
+
 ## Metamorphosis IV (Chameleon)
 * Added Linux X11 cursors conversion to Windows ANI cursors.
 

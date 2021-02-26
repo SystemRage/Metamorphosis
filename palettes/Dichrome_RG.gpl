@@ -1,0 +1,104 @@
+GIMP Palette
+Name: TheOuterLinux - Dichrome-RedGreen
+Columns: 10
+#
+13	13	0	Black
+23	23	0	Charcoal
+45	13	0	Dark brown
+55	23	0	Chocolate
+13	45	0	Very dark green
+23	55	0	Dark green
+45	45	0	Dark olive
+55	55	0	Dark olive
+77	13	0	Mahogany
+87	23	0	Mahogany
+109	13	0	Reddy brown
+119	23	0	Red brown
+77	45	0	Mud brown
+87	55	0	Mud brown
+109	45	0	Chestnut
+119	55	0	Sepia
+13	77	0	Racing green
+23	87	0	Forest
+45	77	0	Navy green
+55	87	0	Navy green
+13	109	0	Tree green
+23	119	0	Tree green
+45	109	0	Tree green
+55	119	0	Dark grass green
+77	77	0	Green brown
+87	87	0	Greenish brown
+109	77	0	Shit brown
+119	87	0	Poop brown
+77	109	0	Olive green
+87	119	0	Mossy green
+112	112	0	Brownish green
+146	13	0	Brick red
+136	23	0	Indian red
+173	13	0	Darkish red
+183	23	0	Darkish red
+146	45	0	Brown red
+136	55	0	Rust brown
+173	45	0	Rust red
+183	55	0	Brick orange
+205	13	0	Tomato
+215	23	0	Orangey red
+237	13	0	Red
+247	23	0	Fire engine red
+205	45	0	Reddish orange
+215	55	0	Reddish orange
+237	45	0	Tomato red
+247	55	0	Orangish red
+146	77	0	Warm brown
+136	87	0	Poo brown
+176	80	0	Cinnamon
+143	112	0	Poo
+176	112	0	Caramel
+208	80	0	Dark orange
+237	77	0	Bright orange
+247	87	0	Bright orange
+208	112	0	Browny orange
+240	112	0	Orange
+13	146	0	True green
+23	136	0	Emerald green
+45	146	0	Grass green
+55	136	0	Dark grass green
+13	173	0	Green
+23	183	0	Green
+45	173	0	Green
+55	183	0	Frog green
+77	146	0	Dark grass green
+87	136	0	Sap green
+112	143	0	Dark yellow green
+80	176	0	Kermit green
+112	176	0	Dark lime green
+13	205	0	Vibrant green
+23	215	0	Vibrant green
+45	205	0	Green apple
+55	215	0	Vibrant green
+13	237	0	Vivid green
+23	247	0	Electric green
+45	237	0	Vivid green
+55	247	0	Poison green
+77	205	0	Green apple
+87	215	0	Green apple
+112	208	0	Kiwi
+77	237	0	Bright lime green
+87	247	0	Bright lime green
+112	240	0	Bright lime
+143	143	0	Pea soup
+176	143	0	Dark gold
+143	176	0	Booger green
+176	176	0	Puke
+208	143	0	Golden brown
+240	143	0	Tangerine
+208	176	0	Dark yellow
+240	176	0	Orangey yellow
+143	208	0	Slime green
+176	208	0	Green/yellow
+143	240	0	Lime
+176	240	0	Yellowgreen
+208	208	0	Piss yellow
+240	208	0	Sun yellow
+208	240	0	Lime yellow
+240	240	0	Sunny yellow

@@ -1,11 +1,11 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import Iconolatry
-import numpy
 import os
 import re
+import logging
+import argparse
 from time import perf_counter
 from zlib import decompress
 from struct import unpack_from, calcsize
@@ -16,1546 +16,1465 @@ from math import ceil
 from subprocess import Popen, PIPE
 from zipfile import ZipFile
 from io import BytesIO
-from binascii import hexlify, unhexlify
-from itertools import chain, groupby
+from itertools import chain
 from shutil import make_archive
-from functools import wraps
+from tempfile import gettempdir
+from hashlib import md5
+from collections import OrderedDict
 
-__name__        = "Metamorphosis"
-__version__     = "IV (Chameleon)"
+__version__     = "V (Reborn)"
 __license__     = "GPL-3.0 License"
 __author__      = u"Matteo ℱan <SystemRage@protonmail.com>"
-__copyright__   = "© Copyright 2018"
+__copyright__   = "© Copyright 2018-2021"
 __url__         = "https://github.com/SystemRage/Metamorphosis"
 __summary__     = "The Ultimate Cursor Converter"
-
 
 ## _________________________________________
 ##| Support to "repeat"/"end repeat" loops  |--------------------------------------------------------------------------------------------------------------
 ##|_________________________________________|
 ##
-class Repeat(object):
-        
-        def loop_limit( script ):
-                """ Defines all start index of loops ('repeat N'),
-                    all stop index ('end repeat') and all number of repetitions ('N'). """
-                ini, fin, rip = ([] for _ in range(3))
-                for i, v in enumerate(script):
-                        if v.startswith('repeat'):
-                                ini.append(i)
-                                a, b = re.split('\s', v)
-                                rip.append(int(b))
-                        elif v.startswith('end'):
-                                fin.append(i)
-                return ini, rip, fin
-        
 
-        def loop_flatten( thelist ):
-                """ Transforms a list of lists in a flat list. """
-                for elem in thelist:
+class Repeat(object):
+        def __init__(self, script):
+                self.script = script
+                self.start, self.stop, self.nloops = ([] for _ in range(3))
+                self.loop_expand()
+
+        def loop_limit(self):
+                """ Defines all start loops indexes ('repeat N'),
+                    all stop loops indexes ('end repeat') and all number of repetitions ('N').
+                """
+                for indx, line in enumerate(self.script):
+                        if line.startswith('repeat'):
+                                self.start.append(indx)
+                                self.nloops.append(int(re.split('\s', line)[1]))
+                        elif line.startswith('end'):
+                                self.stop.append(indx)
+
+        def loop_flatten(self, lst):
+                """ Transforms a list of lists to a flat list. """
+                for elem in lst:
                         if hasattr(elem, '__iter__') and not isinstance(elem, (str, bytes)):
-                                yield from Repeat.loop_flatten(elem)
+                                yield from self.loop_flatten(elem)
                         else:
                                 yield elem
 
-
-        def loop_expand( script ):
+        def loop_expand(self):
                 """ Expands not nested or nested loops or any combination of both. """
-                start, nloop, stop = Repeat.loop_limit( script )
-                
-                while start != []:
+                self.loop_limit()
+
+                while self.start != []:
                         ## Calculate distances between first stop index with all start indexes.
-                        dist = [stop[0] - start[i] for i in range(len(start))]
+                        dist = [self.stop[0] - self.start[i] for i in range(len(self.start))]
                         ## Find index of distances where there's min positive distance.
                         min_dist = min(i for i in dist if i > 0)
                         index_min_dist = dist.index(min_dist)
-                        ## Create loop extension and calculate the number of elements to insert. 
-                        piece = script[ start[index_min_dist] + 1 : stop[0] ] * nloop[index_min_dist]
-                        n_adj = (stop[0] - (start[index_min_dist] + 1)) * nloop[index_min_dist]
+                        ## Create loop extension and calculate the number of elements to insert.
+                        chunk = self.script[self.start[index_min_dist] + 1 : self.stop[0]] * self.nloops[index_min_dist]
+                        nadj = (self.stop[0] - (self.start[index_min_dist] + 1)) * self.nloops[index_min_dist]
                         ## Remove in the script the loop in exam and calculate the number of elements erased.
-                        script[ start[index_min_dist] : stop[0] + 1 ] = []
-                        n_remov = stop[0] + 1 - start[index_min_dist]
+                        self.script[self.start[index_min_dist] : self.stop[0] + 1] = []
+                        ndel = self.stop[0] + 1 - self.start[index_min_dist]
                         ## Insert loop extension at right place and flatten.
-                        script.insert(start[index_min_dist], piece)
-                        script = list(Repeat.loop_flatten( script ))
- 
-                        shift = n_adj - n_remov
+                        self.script.insert(self.start[index_min_dist], chunk)
+                        self.script = list(self.loop_flatten(self.script))
+
+                        shift = nadj - ndel
                         ## Shift all start indexes after the used one.
-                        shifted_start = [ x + shift for x in start[index_min_dist + 1::] ]
-                        start = start[0 : index_min_dist + 1] + shifted_start
+                        shifted_start = [x + shift for x in self.start[index_min_dist + 1::]]
+                        self.start = self.start[0 : index_min_dist + 1] + shifted_start
                         ## Shift all stop indexes after the first.
-                        shifted_stop = [ x + shift for x in stop[1::] ]
-                        stop = stop[0 : 1] + shifted_stop
+                        shifted_stop = [x + shift for x in self.stop[1::]]
+                        self.stop = self.stop[0 : 1] + shifted_stop
                         ## Update lists removing used elements.
-                        start.pop(index_min_dist)
-                        stop.pop(0)
-                        nloop.pop(index_min_dist)
-
-                return script
-        
-
-## ___________________________
-##| Various support functions |-----------------------------------------------------------------------------------------------------------------------------
-##|___________________________|
-##        
-class Auxiliary(object):
-        
-        def namecurs( ):
-                """ Cursor names.
-                    the list of output file names are based on http://fedoraproject.org/wiki/Artwork/EchoCursors/NamingSpec.
-                    NameCursorFX:((NameCursorXP), (NameCursorWindows), (LinkforLinux), (NamesCursorLinux)) """
-                ## To assign : dotbox, dot-box, dot_box, dot_box_mask, draped_box, draped-box, icon, target, zoom-in, zoom-out
-                CURSOR_NAMEMAP = {
-                                0  : (('Arrow'),        ('Arrow'),      ('00normal_select'),             ('default','arrow',
-                                                                                                          'top-left-arrow','top_left_arrow',
-                                                                                                          'left_ptr',
-                                                                                                          'x-cursor','X_cursor')),               # Cursor shape arrow.
-                                1  : (('Help'),         ('Help'),       ('01help_select'),               ('ask','dnd-ask',
-                                                                                                          'help','question_arrow','whats_this',
-                                                                                                          '5c6cd98b3f3ebcb1f9c7f1c204630408',
-                                                                                                          'left_ptr_help',
-                                                                                                          'd9ce0ab605698f320427677b458ad60b')),  # Cursor guide (arrow with ?).
-                                2  : (('AppStarting'),  ('AppStarting'),('02working_in_background'),     ('progress','left_ptr_watch',
-                                                                                                          '08e8e1c95fe2fc01f976f1e063a24ccd',
-                                                                                                          '3ecb610c1bf2410f44200f48c40d3599')),  # Cursor applications start. 
-                                3  : (('Wait'),         ('Wait'),       ('03busy'),                      ('wait','watch',
-                                                                                                          '0426c94ea35c87780ff01dc239897213')),  # Cursor wait.
-                                4  : (('Cross'),        ('Crosshair'),  ('04precision_select'),          ('crosshair','cross',
-                                                                                                          'diamond_cross',
-                                                                                                          'cross_reverse','tcross')),            # Cursor precision selection. 
-                                5  : (('IBeam'),        ('IBeam'),      ('05text_select'),               ('text','xterm',
-                                                                                                          'ibeam','vertical-text')),             # Cursor text.
-                                6  : (('Handwriting'),  ('NWPen'),      ('06handwriting'),               ('pencil',)),                           # Cursor shape pen. 
-                                7  : (('NO'),           ('No'),         ('07unavailable'),               ('no-drop','dnd-none','circle',
-                                                                                                          '03b6e0fcb3499374a867c041f52298f0',
-                                                                                                          'not-allowed','crossed_circle',
-                                                                                                          'forbidden','pirate')),                # Cursor area not allowed. 
-                                8  : (('SizeNS'),       ('SizeNS'),     ('08north_resize'),              ('col-resize','sb_v_double_arrow',
-                                                                                                          'split_v','14fef782d02440884392942c11205230',
-                                                                                                          'n-resize','top_side','ns-resize','v_double_arrow',
-                                                                                                          'size_ver','00008160000006810000408080010102',
-                                                                                                          'top-tee','top_tee',
-                                                                                                          'double_arrow','double-arrow'
-                                                                                                          'up','sb_up_arrow')),                  # Cursor resize two arrows pointing to N and S 
-                                9  : (('SizeS'),        ('SizeS'),      ('09south_resize'),              ('bottom-tee','bottom_tee','down',
-                                                                                                          'sb_down_arrow','s-resize',
-                                                                                                          'bottom_side')),                       # Cursor resize one arrow pointing to N.
-                                10 : (('SizeWE'),       ('SizeWE'),     ('10west_resize'),               ('ew-resize','h_double_arrow',
-                                                                                                          'size_hor','028006030e0e7ebffc7f7070c0600140',
-                                                                                                          'left','sb_left_arrow','left-tee','left_tee',
-                                                                                                          'row-resize','sb_h_double_arrow','split_h',
-                                                                                                          '2870a09082c103050810ffdffffe0204',
-                                                                                                          'w-resize','left_side')),              # Cursor resize two arrows pointing to W and E.
-                                11 : (('SizeE'),        ('SizeE'),      ('11east_resize'),               ('e-resize','right_side','right','sb_right_arrow',
-                                                                                                          'right-tee','right_tee')),             # Cursor resize one arrow pointing to W.
-                                12 : (('SizeNWSE'),     ('SizeNWSE'),   ('12northwest_resize'),          ('nw-resize','top_left_corner','ul_angle',
-                                                                                                          'nwse-resize','fd_double_arrow','size_fdiag',
-                                                                                                          'c7088f0f3e6c8088236ef8e1e3e70000')),  # Cursor resize two arrows pointing to NW and SE.
-                                13 : (('SizeSE'),       ('SizeSE'),     ('13southeast_resize'),          ('se-resize','lr_angle',
-                                                                                                          'bottom_right_corner')),               # Cursor resize one arrow pointing to NW.
-                                14 : (('SizeNESW'),     ('SizeNESW'),   ('14northeast_resize'),          ('ne-resize','top_right_corner','ur_angle',
-                                                                                                          'nesw-resize','bd_double_arrow','size_bdiag',
-                                                                                                          'fcf1c3c7cd4491d801f1e1c78f100000')),  # Cursor resize two arrows pointing to NE and SW.
-                                15 : (('SizeSW'),       ('SizeSW'),     ('15southwest_resize'),          ('sw-resize','ll_angle',
-                                                                                                          'bottom_left_corner')),                # cursor resize one arrow pointing to NE.
-                                16 : (('SizeAll'),      ('SizeAll'),    ('16move'),                      ('cell','plus','all-scroll','fleur',
-                                                                                                          'size_all')),                          # Cursor resize with four arrows pointing to N/S/W/E.
-                                17 : (('UpArrow'),      ('UpArrow'),    ('17alternate_select'),          ('top-right-arrow','right_ptr','move','dnd-move',
-                                                                                                          '4498f0e0c1937ffe01fd06f973665830',
-                                                                                                          '9081237383d90e509aa00f00170e968f',
-                                                                                                          'draft_large','draft_small'
-                                                                                                          'up-arrow','up_arrow','center_ptr')),  # Cursor arrow upside for an insertion point.
-                                18 : (('Hand'),         ('Hand'),       ('18hand'),                      ('alias','link','dnd-link',
-                                                                                                          '3085a0e285430894940527032f8b26df',
-                                                                                                          '640fb0e74195791501fd1ed57b41487f',
-                                                                                                          '9d800788f1b08800ae810202380a0822',
-                                                                                                          'e29285e634086352946a0e7090d73106',
-                                                                                                          'a2a266d0498c3104214a47bd64ab0fc8',
-                                                                                                          'b66166c04f8c3109214a4fbd64a50fc8',
-                                                                                                          'left-hand','hand1','pointer','hand2',
-                                                                                                          'grab','grabbing'
-                                                                                                          'pointing_hand','openhand','hand')),   # Cursor shape hand.
-                                19 : (('Button'),       ('Button'),     ('19button'),                    ('copy','dnd-copy',
-                                                                                                          '1081e37283d90000800003c07f3ef6bf',
-                                                                                                          '6407b0e94181790501fd1e167b474872'))   # Cursor default with a small plus sign next to it.
-                                   }
-                
-                return CURSOR_NAMEMAP
+                        self.start.pop(index_min_dist)
+                        self.stop.pop(0)
+                        self.nloops.pop(index_min_dist)
 
 
-        def callonce( func ):
-                """ To call functions only once. """
-                @wraps(func)
-                def wrapper( *args, **kwargs ):
-                        if not wrapper.called:
-                                wrapper.called = True
-                                return func(*args, **kwargs)
-                wrapper.called = False
-                return wrapper
-
-        @callonce
-        def initial_clean( ):
-                """ Initial directories clean. """
-                global TMP_DIR
-                try:
-                        rmtree(TMP_DIR, onerror = Auxiliary.remove_readonly)
-                except OSError:
-                        pass
-                
-        def folder_1lev( ):
-                """ Defines general parameters and creates directories. """
-                global AUTO_CROP, TMP_DIR, OUTPUT_BASE_DIR, ORIGINAL_DIR, ICOCUR_DIR, CFG_DIR, SCRIPT_LINE_PATTERN
-                
-                ## Remove transparent border.
-                AUTO_CROP = True
-
-                ## Clean at start.    
-                Auxiliary.initial_clean( )
-                
-                ## Create directories.
-                OUTPUT_BASE_DIR = os.path.join(TMP_DIR, 'targets')
-                ORIGINAL_DIR = os.path.join(TMP_DIR, 'originals')
-                CFG_DIR = os.path.join(TMP_DIR, 'cfgs')
-                ICOCUR_DIR = os.path.join(TMP_DIR, 'icons')
-                
-                ## OUTPUT_DIR will be created later, because we need to retrieve the theme_name first.
-                ## Create "conversion" directory and subdirectories "targets", "originals", "icons", "cfgs".
-                Auxiliary.try_mkdir(TMP_DIR)
-                Auxiliary.try_mkdir(OUTPUT_BASE_DIR)
-                Auxiliary.try_mkdir(ORIGINAL_DIR)
-                Auxiliary.try_mkdir(CFG_DIR)
-                Auxiliary.try_mkdir(ICOCUR_DIR)
-                                
-                SCRIPT_LINE_PATTERN = re.compile(r'(\d+)(?:-(\d+))?(?:,(\d+))?')
-
-
-        def folder_2lev( themnam ):
-                """ Creates sub-directories. """
-                global OUTPUT_BASE_DIR, OUTPUT_DIR, OUTPUT_CURS_DIR, logger
-                                
-                OUTPUT_DIR = OUTPUT_BASE_DIR + os.sep + themnam
-                Auxiliary.try_mkdir(OUTPUT_DIR)
-                OUTPUT_CURS_DIR = OUTPUT_DIR + os.sep + 'cursors'
-                Auxiliary.try_mkdir(OUTPUT_CURS_DIR)
-                logger.write('<------>< Image Extraction ><------>\n')
-                
-
-        def setup( N ):
-                """ Imports parameters. """
-                global TMP_DIR, CURSOR_NAMEMAP, logger
-                
-                ## Import directories.
-                Auxiliary.folder_1lev( )
-                CURSOR_NAMEMAP = Auxiliary.namecurs( )
-                ## Open logging file.
-                logger = open('%s/%s' %(TMP_DIR, 'logconv.txt'), 'a', encoding = 'utf-8')
-                logger.write( Main.process_headernum( N ) )
-                                
-        
-        def try_mkdir( pathdir ):
-                """ Creates job folders. """
-                os.makedirs(pathdir, exist_ok = True)
-
-        def remove_readonly( func, path, excinfo ):
-                """ Removes read only permission. """
-                os.chmod(path, S_IWRITE)
-                func(path)
-               
-        def resize_image( image, newsize, method = Image.ANTIALIAS ):
-                """ Resizes a PIL image to a maximum size specified maintaining the aspect ratio.
-                    Allows usage of different resizing methods and does not modify the image in place;
-                    then creates an exact square image. """
-                
-                w, h = image.size
-                nw, nh = newsize
-                imAspect = float(w)/float(h)
-                outAspect = float(nw)/float(nh)
-                if imAspect >= outAspect:
-                        ## Set w to maxWidth.
-                        ## Set h to (maxWidth / imAspect).
-                        image = image.resize( (nw, int((float(nw)/imAspect) + 0.5)), method )
-                else:
-                        ## Set w to (maxHeight * imAspect).
-                        ## Set h to maxHeight.
-                        image = image.resize( (int((float(nh)*imAspect) + 0.5), nh), method )
-                        
-                ## Create background transparent image.
-                thumb = Image.new('RGBA', newsize, (255, 255, 255, 0))
-                thumb.paste( image, ((nw - image.size[0]) // 2, (nh - image.size[1]) // 2) )
-                        
-                return thumb
-        
-
-        def resize_make( w_res, h_res, img_list ):
-                """ Applies resize with icon dimensions to image list and adjusts hotspots. """
-                global mouse_x, mouse_y, frame_count
-                
-                w_norm, h_norm = img_list[0].size
-                scale_x = w_res / w_norm
-                scale_y = h_res / h_norm
-                
-                img_list = [ Auxiliary.resize_image(img_list[i], (w_res, h_res), method = Image.ANTIALIAS) for i in range(frame_count) ]
-                        
-                ## Scale hotspots.                                
-                mouse_x = int(0.5 * ceil(2.0 * (mouse_x * scale_x)))
-                mouse_y = int(0.5 * ceil(2.0 * (mouse_y * scale_y)))
-                
-                return img_list
-        
-
-        def single_image( image_width, image_height, imgstrip ):
-                """ Gets images from strip image. """
-                global frame_count
-                
-                frame_width = int(image_width / frame_count)
-                frame_height = image_height
-
-                img_list = [ imgstrip.crop((frame_width * i, 0, frame_width * (i+1), image_height)) for i in range(frame_count) ]
-                                                        
-                return img_list
-
-
-        def crop_image( img_list ):
-                """ Crops border. """
-                global AUTO_CROP, mouse_x, mouse_y, frame_count
-
-                if AUTO_CROP:
-                        bbox = [mouse_x, mouse_y, mouse_x + 1, mouse_y + 1]
-                        for i in range(frame_count):
-                                tbbox = img_list[i].getbbox()
-                                if tbbox is not None:
-                                        bbox[0] = min(bbox[0], tbbox[0])
-                                        bbox[1] = min(bbox[1], tbbox[1])
-                                        bbox[2] = max(bbox[2], tbbox[2])
-                                        bbox[3] = max(bbox[3], tbbox[3])
-                       
-                        img_list = [ img_list[i].crop(bbox) for i in range(frame_count) ]
-                        mouse_x -= bbox[0]
-                        mouse_y -= bbox[1]
-                        
-                return img_list
-        
-
-        def adjust_image( imgstrip, w_res, h_res, color ):
-                """ Executes various image operations. """
-                global ORIGINAL_DIR, image_index, cursor_status, frame_count
-                
-                ## Save image strip (format: img0-1.png).
-                imgstrip.save('%s/img%d-%d.png' %(ORIGINAL_DIR, image_index, cursor_status), 'PNG')
-                ## Get single images from strip frames.
-                w, h = imgstrip.size
-                img_list = Auxiliary.single_image( w, h, imgstrip )
-                ## Crop transparent border.
-                img_list = Auxiliary.crop_image( img_list )
-                ## Resize.
-                img_list = Auxiliary.resize_make( w_res, h_res, img_list )
-                ## Colorize.
-                img_list = [ Auxiliary.colorize( color, img_list[i] ) for i in range(frame_count) ]
-                ## Save images. (format: img0-1_0.png)
-                for i in range(frame_count):
-                        img_list[i].save('%s/img%d-%d_%d.png' %(ORIGINAL_DIR, image_index, cursor_status, i), 'PNG')
-
-                        
-        def colorize( colortype, image ):
-                """ Changes color cursor. """
-                if colortype == 'rgb':
-                        ## rgba --> colorization original.
-                        return image
-                else:
-                        image = numpy.array(image.convert('RGBA'))
-                        r, g, b, a = image.T
-                        chan1, chan2, chan3 = list(colortype)
-                        ## rbga --> variation red.
-                        ## grba --> variation green.
-                        ## brga --> variation green.
-                        ## gbra --> variation blue.
-                        ## bgra --> variation blue.
-                        new_image = numpy.dstack((eval(chan1), eval(chan2), eval(chan3), a))
-                        new_image = Image.fromarray(new_image, 'RGBA')
-                        return new_image
-                
-
-        def what_write( typeplatf, typext, *args ):
-                """ Support for writing config files. """
-                global cfg
-                
-                towrite = '%s/img%d-%d_%d.%s %d\n' %(args[0], args[1], args[2], args[3], typext ,args[4])
-
-                if typeplatf == 'Linux':
-                        stringini = '%d %d %d ' %(args[5], args[6], args[7])
-                        towrite = stringini + towrite
-                        
-                cfg.write(towrite)
-                
-                        
-        def parser_script( script_data, typeplatf, xsize ):
-                """ Creates the sequence script defined. """
-                global SCRIPT_LINE_PATTERN, frame_interval, frame_count, mouse_x, mouse_y, image_index, cursor_status
-                global ICOCUR_DIR, ORIGINAL_DIR
-                global logger, cfg
-                
-                script_parsed = False
-                script_flag = True
-                try:
-                        if script_data == None:
-                                pass
-                        else:
-                                if typeplatf == 'Windows':
-                                        ## Config file header for Windows.
-                                        cfg.write('%d\n%d\n' %(frame_count, frame_interval)) 
-                                        cfg.write('%d\n%d\n' %(mouse_x, mouse_y)) 
-                                for x in script_data:
-                                        ## Note this examples:
-                                        ## SCRIPT_LINE_PATTERN.match('2-5,30').groups() --> ('2', '5', '30')
-                                        ## SCRIPT_LINE_PATTERN.match('6-10').groups() --> ('6', '10', None) 
-                                        ## SCRIPT_LINE_PATTERN.match('1,3000').groups() --> ('1', None, '3000')
-                                        start_frame, end_frame, interval = SCRIPT_LINE_PATTERN.match(x).groups() 
-                                        start_frame = int(start_frame)
-                                        
-                                        if end_frame is None:
-                                                end_frame = start_frame
-                                        else:
-                                                end_frame = int(end_frame)
-                                                
-                                        if interval is None:
-                                                interval = frame_interval
-                                        else:
-                                                interval = int(interval)
-
-                                        step = 1 if end_frame >= start_frame else -1
-
-                                        ## Note that the frame index in the script is 1-based.
-                                        if start_frame <= frame_count and end_frame <= frame_count:
-                                                for i in range(start_frame, end_frame + step, step):
-                                                        if typeplatf == 'Windows':
-                                                                Auxiliary.what_write( typeplatf, 'ico', ICOCUR_DIR,image_index,cursor_status,i-1,interval)
-                                                        elif typeplatf == 'Linux':
-                                                                Auxiliary.what_write( typeplatf, 'png', ORIGINAL_DIR,image_index,cursor_status,i-1,interval,
-                                                                                      xsize,mouse_x,mouse_y)
-                                        else:
-                                                script_flag = False
-                                                break
-                                                
-                                script_parsed = script_flag
-                except:
-                        logger.write(' !!! Script Error --> Cannot parse script line: %s\n' %x)
-                        pass
-
-                return script_parsed
-        
-
-        def parser_animation( typeplatf, xsize ):
-                """ Creates the sequence animation defined. """
-                global animation_type, frame_interval, frame_count, mouse_x, mouse_y, image_index, cursor_status
-                global ICOCUR_DIR, ORIGINAL_DIR
-                global cfg, logger
-
-                if typeplatf == 'Windows':
-                        ## Config file header for Windows.
-                        cfg.write('%d\n%d\n' %(frame_count, frame_interval)) 
-                        cfg.write('%d\n%d\n' %(mouse_x, mouse_y))
-                        
-                if animation_type == 0:         # ANIMATION_TYPE_NONE
-                        for i in range(frame_count):
-                                if typeplatf == 'Windows':
-                                        Auxiliary.what_write( typeplatf, 'ico', ICOCUR_DIR,image_index,cursor_status,i,
-                                                              (frame_interval if (i < frame_count - 1) else 1000000) )
-                                elif typeplatf == 'Linux':
-                                        Auxiliary.what_write( typeplatf, 'png', ORIGINAL_DIR,image_index,cursor_status,i,
-                                                              (frame_interval if (i < frame_count - 1) else 1000000), xsize,mouse_x,mouse_y )
- 
-                elif animation_type == 2:       # ANIMATION_TYPE_LOOP
-                        for i in range(frame_count):
-                                if typeplatf == 'Windows':
-                                        Auxiliary.what_write( typeplatf, 'ico', ICOCUR_DIR,image_index,cursor_status,i,frame_interval )
-                                elif typeplatf == 'Linux':
-                                        Auxiliary.what_write( typeplatf, 'png', ORIGINAL_DIR,image_index,cursor_status,i,frame_interval,
-                                                              xsize,mouse_x,mouse_y )
-                        
-                elif animation_type == 3:       # ANIMATION_TYPE_ALTERNATE
-                        for i in chain(range(frame_count), range(frame_count-2,-1,-1)):
-                                if typeplatf == 'Windows':
-                                        Auxiliary.what_write( typeplatf, 'ico', ICOCUR_DIR,image_index,cursor_status,i,frame_interval )
-                                elif typeplatf == 'Linux':
-                                        Auxiliary.what_write( typeplatf, 'png', ORIGINAL_DIR,image_index,cursor_status,i,frame_interval,
-                                                              xsize,mouse_x,mouse_y ) 
-                else:
-                        logger.write(' !!! Animation Error --> Unknown animation type: %d\n' %animation_type)
-                        pass
-                        
-
-## ____________________________________
-##| Stardock Cursor themes conversion  |--------------------------------------------------------------------------------------------------------------------
-##|____________________________________|
+## _________________________________
+##| Generic functions and variables |------------------------------------------------------------------------------------------------------------------------
+##|_________________________________|
 ##
-class StardockCursor(object):      
-        
-        def convert_FX( fileFX, N, w_res, h_res, typeplatf, color ):
-                """ Extracts data from file theme CURSORFX, then creates ANIs or X11s. """
-                
-                global CFG_DIR, logger, cfg
-                global mouse_x, mouse_y, frame_count, animation_type, frame_interval, image_index, cursor_status
 
-                ## Create directories.
-                Auxiliary.setup( N )
-                                
+script_pattern = re.compile(r'(\d+)(?:-(\d+))?(?:,(\d+))?')
+
+label = "*Converted by Metamorphosis, {}*".format(__copyright__)
+
+working_path = os.path.abspath('.')
+
+""" Cursor names.
+    the list of output file names are based on http://fedoraproject.org/wiki/Artwork/EchoCursors/NamingSpec.
+    NameCursorFX:((NameCursorXP), (NameCursorWindows), (LinkforLinux), (NamesCursorLinux))
+"""
+## TODO: To assign : dotbox, dot-box, dot_box, dot_box_mask, draped_box, draped-box, icon, target, zoom-in, zoom-out
+cursor_namemap = {
+                  # Cursor shape arrow.
+                  0  : (('Arrow'),        ('Arrow'),      ('00normal_select'),             ('default','arrow',
+                                                                                            'top-left-arrow','top_left_arrow',
+                                                                                            'left_ptr',
+                                                                                            'x-cursor','X_cursor')),
+                  # Cursor guide (arrow with ?).
+                  1  : (('Help'),         ('Help'),       ('01help_select'),               ('ask','dnd-ask',
+                                                                                           'help','question_arrow','whats_this',
+                                                                                           '5c6cd98b3f3ebcb1f9c7f1c204630408',
+                                                                                           'left_ptr_help',
+                                                                                           'd9ce0ab605698f320427677b458ad60b')),
+                  # Cursor applications start.
+                  2  : (('AppStarting'),  ('AppStarting'),('02working_in_background'),     ('progress','left_ptr_watch',
+                                                                                            '08e8e1c95fe2fc01f976f1e063a24ccd',
+                                                                                            '3ecb610c1bf2410f44200f48c40d3599')),
+                  # Cursor wait.
+                  3  : (('Wait'),         ('Wait'),       ('03busy'),                      ('wait','watch',
+                                                                                            '0426c94ea35c87780ff01dc239897213')),
+                  # Cursor precision selection.
+                  4  : (('Cross'),        ('Crosshair'),  ('04precision_select'),          ('crosshair','cross',
+                                                                                            'diamond_cross',
+                                                                                            'cross_reverse','tcross')),
+                  # Cursor text.
+                  5  : (('IBeam'),        ('IBeam'),      ('05text_select'),               ('text','xterm',
+                                                                                            'ibeam','vertical-text')),
+                  # Cursor shape pen.
+                  6  : (('Handwriting'),  ('NWPen'),      ('06handwriting'),               ('pencil',)),
+
+                  # Cursor area not allowed.
+                  7  : (('NO'),           ('No'),         ('07unavailable'),               ('no-drop','dnd-none','circle',
+                                                                                            '03b6e0fcb3499374a867c041f52298f0',
+                                                                                            'not-allowed','crossed_circle',
+                                                                                            'forbidden','pirate')),
+                  # Cursor resize two arrows pointing to N and S.
+                  8  : (('SizeNS'),       ('SizeNS'),     ('08north_resize'),              ('col-resize','sb_v_double_arrow',
+                                                                                            'split_v','14fef782d02440884392942c11205230',
+                                                                                            'n-resize','top_side','ns-resize','v_double_arrow',
+                                                                                            'size_ver','00008160000006810000408080010102',
+                                                                                            'top-tee','top_tee',
+                                                                                            'double_arrow','double-arrow'
+                                                                                            'up','sb_up_arrow')),
+                  # Cursor resize two arrows pointing to N.
+                  9  : (('SizeS'),        ('SizeS'),      ('09south_resize'),              ('bottom-tee','bottom_tee','down',
+                                                                                            'sb_down_arrow','s-resize',
+                                                                                            'bottom_side')),
+                  # Cursor resize two arrows pointing to W and E.
+                  10 : (('SizeWE'),       ('SizeWE'),     ('10west_resize'),               ('ew-resize','h_double_arrow',
+                                                                                            'size_hor','028006030e0e7ebffc7f7070c0600140',
+                                                                                            'left','sb_left_arrow','left-tee','left_tee',
+                                                                                            'row-resize','sb_h_double_arrow','split_h',
+                                                                                            '2870a09082c103050810ffdffffe0204',
+                                                                                            'w-resize','left_side')),
+                  # Cursor resize one arrow pointing to W.
+                  11 : (('SizeE'),        ('SizeE'),      ('11east_resize'),               ('e-resize','right_side','right','sb_right_arrow',
+                                                                                            'right-tee','right_tee')),
+                  # Cursor resize two arrows pointing to NW and SE.
+                  12 : (('SizeNWSE'),     ('SizeNWSE'),   ('12northwest_resize'),          ('nw-resize','top_left_corner','ul_angle',
+                                                                                            'nwse-resize','fd_double_arrow','size_fdiag',
+                                                                                            'c7088f0f3e6c8088236ef8e1e3e70000')),
+                  # Cursor resize one arrow pointing to NW.
+                  13 : (('SizeSE'),       ('SizeSE'),     ('13southeast_resize'),          ('se-resize','lr_angle',
+                                                                                            'bottom_right_corner')),
+                  # Cursor resize two arrows pointing to NE and SW.
+                  14 : (('SizeNESW'),     ('SizeNESW'),   ('14northeast_resize'),          ('ne-resize','top_right_corner','ur_angle',
+                                                                                            'nesw-resize','bd_double_arrow','size_bdiag',
+                                                                                            'fcf1c3c7cd4491d801f1e1c78f100000')),
+                  # Cursor resize one arrow pointing to NE.
+                  15 : (('SizeSW'),       ('SizeSW'),     ('15southwest_resize'),          ('sw-resize','ll_angle',
+                                                                                            'bottom_left_corner')),
+                  # Cursor resize with four arrows pointing to N/S/W/E.
+                  16 : (('SizeAll'),      ('SizeAll'),    ('16move'),                      ('cell','plus','all-scroll','fleur',
+                                                                                            'size_all')),
+                  # Cursor arrow upside for an insertion point.
+                  17 : (('UpArrow'),      ('UpArrow'),    ('17alternate_select'),          ('top-right-arrow','right_ptr','move','dnd-move',
+                                                                                            '4498f0e0c1937ffe01fd06f973665830',
+                                                                                            '9081237383d90e509aa00f00170e968f',
+                                                                                            'draft_large','draft_small'
+                                                                                            'up-arrow','up_arrow','center_ptr')),
+                  # Cursor shape hand.
+                  18 : (('Hand'),         ('Hand'),       ('18hand'),                      ('alias','link','dnd-link',
+                                                                                            '3085a0e285430894940527032f8b26df',
+                                                                                            '640fb0e74195791501fd1ed57b41487f',
+                                                                                            '9d800788f1b08800ae810202380a0822',
+                                                                                            'e29285e634086352946a0e7090d73106',
+                                                                                            'a2a266d0498c3104214a47bd64ab0fc8',
+                                                                                            'b66166c04f8c3109214a4fbd64a50fc8',
+                                                                                            'left-hand','hand1','pointer','hand2',
+                                                                                            'grab','grabbing'
+                                                                                            'pointing_hand','openhand','hand')),
+                  # Cursor default with a small plus sign next to it.
+                  19 : (('Button'),       ('Button'),     ('19button'),                    ('copy','dnd-copy',
+                                                                                            '1081e37283d90000800003c07f3ef6bf',
+                                                                                            '6407b0e94181790501fd1e167b474872'))
+                  }
+
+class ExtendAction(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string = None):
+                items = getattr(namespace, self.dest) or []
+                items.extend(values)
+                setattr(namespace, self.dest, items)
+
+def metamorphosis_parser():
+        """ CLI parser. """
+        options = {}
+        morph_parser = argparse.ArgumentParser(description = __summary__, epilog = 'version: ' + __version__, add_help = False, allow_abbrev = False)
+        morph_parser.register('action', 'extend', ExtendAction)
+        morph_required = morph_parser.add_argument_group('required arguments')
+
+        morph_required.add_argument('-i', '--input', required = True, nargs = "+", action = "extend", default = [], type = str,
+                                    dest = "input",
+                                    help = "Path(s) of cursor file(s) or folder(s) to convert.")
+
+        morph_optional = morph_parser.add_argument_group('optional arguments')
+        morph_optional.add_argument('-h', '--help', action = "help", default = argparse.SUPPRESS,
+                                    help = "show this help message and exit")
+
+        morph_optional.add_argument('-o', '--output', action = "store", default = working_path, type = str,
+                                    dest = "output",
+                                    help = "Path of converted cursor(s). Default is your working directory.")
+        morph_optional.add_argument('-p', '--pack', action = 'store_true', default = False,
+                                    dest = "pack",
+                                    help = "Enable packing converted cursors. Disabled by default")
+        morph_optional.add_argument('-r', '--crop', action = 'store_false', default = True,
+                                    dest = "crop",
+                                    help = "Disable removing transparent border. Enabled by default.")
+        morph_optional.add_argument('-s', '--size', action = 'store', default = 16, choices = [16, 24, 32, 48, 64, 96], type = int,
+                                    dest = "size",
+                                    help = "Select size (in pixels) for converted cursors. Default is `16` pixels.")
+        morph_optional.add_argument('-c', '--color', action = 'store', default = 'rgb', choices = ['rgb', 'rbg', 'grb', 'brg', 'gbr', 'bgr'], type = str,
+                                    dest = "color",
+                                    help = "Select color change for converted cursors. Default is `rgb`.")
+        morph_optional.add_argument('-t', '--platform', action = 'store', default = 'Linux', choices = ['Linux', 'Windows'], type = str,
+                                    dest = "platform",
+                                    help = "Select destination OS for converted cursors. Default is `Linux` platform.")
+
+        try:
+                options.update(vars(morph_parser.parse_args()))
+                ## Define size as tuple (width and height).
+                options['size'] = (options['size'], options['size'])
+        except Exception as e:
+                raise e
+
+        return options
+
+
+## ________________________
+##| Image editor functions |---------------------------------------------------------------------------------------------------------------------------------
+##|________________________|
+##
+
+class Editor(object):
+        def __init__(self, parameters, options):
+                self.parameters = parameters
+                self.options = options
+
+        def resize_meth(self, image, method = Image.ANTIALIAS):
+                """ Resizes PIL image to a maximum size specified maintaining the aspect ratio.
+                    Allows usage of different resizing methods and does not modify the image in place,
+                    then creates an exact square image.
+                """
+                w_fin, h_fin = self.options['size']
+                w_ini, h_ini = image.size
+
+                ini_aspect = float(w_ini) / float(h_ini)
+                fin_aspect = float(w_fin) / float(h_fin)
+
+                if ini_aspect >= fin_aspect:
+                        ## Set w to (final width).
+                        ## Set h to (final width / initial aspect ratio).
+                        image = image.resize((w_fin, int((float(w_fin) / ini_aspect) + 0.5)), method)
+                else:
+                        ## Set w to (final height * initial aspect ratio).
+                        ## Set h to (final height).
+                        image = image.resize((int((float(h_fin) * ini_aspect) + 0.5), h_fin), method)
+
+                ## Create background transparent image.
+                thumbnail = Image.new('RGBA', self.options['size'], (255, 255, 255, 0))
+                thumbnail.paste(image, ((w_fin - image.size[0]) // 2, (h_fin - image.size[1]) // 2))
+
+                return thumbnail
+
+        def resize_exec(self, image_list):
+                """ Applies icon dimensions resize to image list and adjusts hotspots. """
+                w_fin, h_fin = self.options['size']
+                w_ini, h_ini = image_list[0].size
+                scale_x = w_fin / w_ini
+                scale_y = h_fin / h_ini
+
+                image_list = [self.resize_meth(image_list[i], method = Image.ANTIALIAS) for i in range(self.parameters['count'])]
+
+                ## Scale hotspots.
+                self.parameters['hotx'] = int(0.5 * ceil(2.0 * (self.parameters['hotx'] * scale_x)))
+                self.parameters['hoty'] = int(0.5 * ceil(2.0 * (self.parameters['hoty'] * scale_y)))
+
+                return image_list
+
+        def slice(self, image_strip):
+                """ Gets images from strip image. """
+                image_w, image_h = image_strip.size
+                frame_w = int(image_w / self.parameters['count'])
+                image_list = [image_strip.crop((frame_w * i, 0, frame_w * (i + 1), image_h)) for i in range(self.parameters['count'])]
+
+                return image_list
+
+        def crop(self, image_list):
+                """ Crops border. """
+                bbox = [self.parameters['hotx'], self.parameters['hoty'],
+                        self.parameters['hotx'] + 1, self.parameters['hoty'] + 1]
+
+                for i in range(self.parameters['count']):
+                        tbbox = image_list[i].getbbox()
+                        if tbbox is not None:
+                                bbox[0] = min(bbox[0], tbbox[0])
+                                bbox[1] = min(bbox[1], tbbox[1])
+                                bbox[2] = max(bbox[2], tbbox[2])
+                                bbox[3] = max(bbox[3], tbbox[3])
+
+                image_list = [image_list[i].crop(bbox) for i in range(self.parameters['count'])]
+                self.parameters['hotx'] -= bbox[0]
+                self.parameters['hoty'] -= bbox[1]
+
+                return image_list
+
+        def colorize(self, image):
+                """ Changes color cursor. """
+                ## rgba --> original.
+                if self.options['color'] != 'rgb':
+                        image = image.convert('RGBA')
+                        r, g, b, a = image.split()
+                        ch1, ch2, ch3 = list(self.options['color'])
+                        ## rbga --> swap green - blue.
+                        ## grba --> swap red - green.
+                        ## bgra --> inverted.
+                        ## brga --> inverted, swap red - green.
+                        ## gbra --> inverted, swap green - blue.
+                        image = Image.merge('RGBA', (eval(ch1), eval(ch2), eval(ch3), a))
+
+                return image
+
+        def adjust(self, image, extended = True, custom = ''):
+                """ Executes some edit operations. """
+                if extended:
+                        ## Save image strip (format: img0-1.png).
+                        path = os.path.join(process.original_dir, "img{:d}-{:d}.png".format(self.parameters['index'], self.parameters['status']))
+                        image.save(path, 'PNG')
+                        ## Get every frame image from image strip.
+                        image = self.slice(image)
+                        ## Crop transparent border (eventually).
+                        if self.options['crop']:
+                                image = self.crop(image)
+
+                ## Resize.
+                if self.options['size'] != (0, 0):
+                        image = self.resize_exec(image)
+                ## Colorize and save images (format: img0-1_0.png).
+                for i in range(self.parameters['count']):
+                        ima = self.colorize(image[i])
+                        path = os.path.join(process.original_dir, ("{}".format(custom) if custom else
+                                                                   "img{:d}-{:d}_{:d}.png".format(self.parameters['index'], self.parameters['status'], i)))
+                        ima.save(path, 'PNG')
+
+
+## ______________________________________
+##| Parsing script / animation functions |-------------------------------------------------------------------------------------------------------------------
+##|______________________________________|
+##
+
+class Parser(object):
+        def __init__(self, parameters, options):
+                self.parameters = parameters
+                self.options = options
+                self.logger = logging.getLogger('Metamorphosis')
+
+        def cfg_writer(self, cfg, script_index, script_interval, custom = ''):
+                """ Support for config files writing. """
+                towrite = ''
+
+                if self.options['platform'] == 'Linux':
+                        towrite += "{:d} {:d} {:d} ".format(self.options['size'][0], self.parameters['hotx'], self.parameters['hoty'])
+
+                path = (process.icocur_dir if self.options['platform'] == 'Windows' else process.original_dir)
+                extension = ('.cur' if self.options['platform'] == 'Windows' else '.png')
+                towrite += os.path.join(path, "img{:d}-{:d}_{:d}{}{} {:d}\n".format(self.parameters['index'],
+                                                                                    self.parameters['status'], script_index, custom,
+                                                                                    extension, script_interval))
+                cfg.write(towrite)
+
+        def script(self, cfg, script_data):
+                """ Creates the sequence script defined. """
+                is_parsed = True
+
+                try:
+                        for line in script_data:
+                                ## Note examples:
+                                ## script_pattern.match('2-5,30').groups() --> ('2', '5', '30')
+                                ## script_pattern.match('6-10').groups() --> ('6', '10', None)
+                                ## script_pattern.match('1,3000').groups() --> ('1', None, '3000')
+                                start_frame, stop_frame, interval = script_pattern.match(line).groups()
+                                start_frame = int(start_frame)
+                                stop_frame = (int(stop_frame) if stop_frame else start_frame)
+                                interval = (int(interval) if interval else self.parameters['interval'])
+                                step = (1 if stop_frame >= start_frame else -1)
+                                ## Note that the frame index in the script is 1-based.
+                                if all(value <= self.parameters['count'] for value in [start_frame, stop_frame]):
+                                        for i in range(start_frame, stop_frame + step, step):
+                                                self.cfg_writer(cfg, i - 1, interval)
+                                else:
+                                        self.logger.error('Error: cannot parse script line "{}" --> script indexes mismatch\n'.format(line))
+                                        is_parsed = False
+                                        break
+                except:
+                        self.logger.error('Error: cannot parse script line "{}" --> script corrupted\n'.format(line))
+                        is_parsed = False
+
+                return is_parsed
+
+        def animation(self, cfg):
+                """ Creates the sequence animation defined. """
+                if self.parameters['anim'] == 0:
+                        # Case animation: NONE
+                        for i in range(self.parameters['count']):
+                                interval = (self.parameters['interval'] if i < self.parameters['count'] - 1 else 1000000)
+                                self.cfg_writer(cfg, i, interval)
+                elif self.parameters['anim'] == 2:
+                        # Case animation: LOOP
+                        for i in range(self.parameters['count']):
+                                self.cfg_writer(cfg, i, self.parameters['interval'])
+                elif self.parameters['anim'] == 3:
+                        # Case animation: ALTERNATE
+                        for i in chain(range(self.parameters['count']), range(self.parameters['count'] - 2, -1, -1)):
+                                self.cfg_writer(cfg, i, self.parameters['interval'])
+                else:
+                        self.logger.error('Error: unknown animation type: {:d}\n'.format(self.parameters['anim']))
+
+
+## _______________________________________
+##| Stardock cursors conversion functions |------------------------------------------------------------------------------------------------------------------
+##|_______________________________________|
+##
+
+class Stardock(object):
+        def __init__(self, options):
+                self.options = options
+                self.logger = logging.getLogger('Metamorphosis')
+
+        def strip_frames(self, image_strip):
+                """ Gets image strip frames and adjust them. """
+                editor = Editor(self.parameters, self.options)
+                editor.adjust(image_strip)
+
+        def script_missing(self, cfg_file):
+                """ Defines operations when script missing. """
+                self.logger.warning('Warning: script missing: fallback to default animation for image index #{:d}, status {:d}\n'
+                                    .format(self.parameters['index'], self.parameters['status']))
+                ## Use default animation.
+                parser = Parser(self.parameters, self.options)
+                parser.animation(cfg_file)
+
+        def script_exist(self, cfg_file, script_data):
+                """ Defines operations when script exists. """
+                ## Log script lines.
+                self.logger.info('\tScript:\n\t\t{}\n'.format('\n\t\t'.join(script_data)))
+                ## Eventually expand loops.
+                if 'end repeat' in script_data:
+                        try:
+                                script_data = Repeat(script_data).script
+                        except:
+                                self.logger.error('Error: cannot expand script --> script corrupted\n')
+
+                ## Parse script.
+                parser = Parser(self.parameters, self.options)
+                is_parsed = parser.script(cfg_file, script_data)
+
+                if not is_parsed:
+                        ## Script not well formatted.
+                        self.logger.warning('Warning: script corrupted: fallback to default animation for image index #{:d}, status {:d}\n'
+                                            .format(self.parameters['index'], self.parameters['status']))
+                        cfg_file.seek(0)
+                        ## Using default animation.
+                        parser.animation(self.options['size'][0])
+
+        def convert_FX(self, fileFX):
+                """ Extracts data from theme file `.cursorFX`, then creates `.ani`s or `X11`s. """
                 ## Read data file.
-                with open(fileFX, 'rb') as f:
-                        data = f.read()
+                with open(fileFX, 'rb') as file:
+                        data = file.read()
 
                 ## Extract header data.
+                self.logger.info('<------>< Info Extraction ><------>\n')
                 version, header_size, data_size, theme_type = unpack_from('<4I', data, 0)
                 info_size, = unpack_from('<I', data, header_size - 4)
+                self.logger.info(u'Header info:\n\n\tVersion: {}\n\tHeader size: {}\n\tData size: {}\n\tTheme type: {}\n\tInfo size: {}\n\n'
+                                 .format(version, header_size, data_size, theme_type, info_size))
 
-                logger.write( 'Header Info:\n\n Version: %u\n Header Size: %u\n Data Size: %u\n Theme Type: %u\n Info size: %u\n\n'
-                               %(version, header_size, data_size, theme_type, info_size) )
-                
                 ## Extract remaining data.
                 data = decompress(data[header_size:])
-        
+
                 try:
                         assert len(data) == data_size
                 except AssertionError:
-                        logger.write('!!! Conversion Abort --> File %s Corrupted\n' %fileFX)
-                        logger.close()
+                        self.logger.error('Error: file {} corrupted --> conversion aborted\n'.format(fileFX))
                         return
 
                 ## Get theme info.
                 info = data[:info_size].decode('utf-16le').split('\0')[:-1]
-                ## Fill with ' ' if theme info data missing (theme info is a list of 3 elements).
-                while len(info) < 3:
-                        info.append(' ')
-                comment = ' - '.join(info)
-                logger.write('Theme info: %s\n' %comment)
-                                        
-                ## Get the theme name.
-                theme_name = info[0].strip()
-                if theme_name == ' ':
-                        ## If theme name missing in data stream, get it from file name.
-                        theme_name = fileFX.split(os.sep)[-1].split('.')[0]
-                theme_name = theme_name.replace(',','_').replace(' ','')
+                ## Handle theme info data.
+                if not info:
+                        comment = 'missing'
+                        ## Theme name missing in datastream, get it from filename.
+                        theme_name = os.path.splitext(os.path.basename(fileFX))[0]
+                else:
+                        comment = " - ".join(list(" ".join(inf.splitlines()) for inf in info))
+                        theme_name = info[0].strip()
+                theme_name = theme_name.replace(',', '_').replace(' ', '')
+                self.logger.info('Theme info:\n\n\t{}\n\n'.format(comment))
 
-                ## Creation subdirectories under "targets".
-                Auxiliary.folder_2lev( theme_name )
-                                        
-                ## Start processing image data.
+                ## Creation subfolders under `targets` folder.
+                process.create_subfolders(theme_name)
+
+                ## Start processing data.
                 cur_pos = info_size
                 while cur_pos < len(data):
-
-                        # Extract image data.
+                        ## Extract data.
                         pointer_type, size_of_header_without_script_1, size_of_header_and_image = unpack_from('<3I', data, cur_pos)
 
                         if pointer_type != 2:
-                                logger.write('!!! Cursor Skipped --> Found type #%d, not a pointer image\n' %pointer_type)
+                                self.logger.error('Error: found type #{:d}, not a pointer image --> conversion skipped\n'.format(pointer_type))
                                 cur_pos += size_of_header_and_image
                                 continue
-                        (
-                        unknown_1,
-                        image_index,
-                        cursor_status,
-                        unknown_2,
-                        frame_count,
-                        image_width,
-                        image_height,
-                        frame_interval,
-                        animation_type,
-                        unknown_3,
-                        mouse_x,
-                        mouse_y,
-                        size_of_header_with_script,
-                        size_of_image,
-                        size_of_header_without_script_2,
-                        size_of_script
-                        ) = unpack_from('<16I', data, cur_pos + calcsize('<3I'))
-                  
-                        logger.write('\nImage #%d:\n\n Type: %u\n Unknown_1: %u\n Index: %u\n Status: %u\n Unknown_2: %u\n Frame count: %u\n Image size: %ux%u\n \
-Frame interval: %u\n Unknown_3: %u\n Animation type: %u\n Mouse position: (%u,%u)\n Size of script: %u\n' %(image_index, pointer_type, unknown_1,
-                                                                                                    image_index, cursor_status, unknown_2,
-                                                                                                    frame_count, image_width, image_height,
-                                                                                                    frame_interval, unknown_3, animation_type,
-                                                                                                    mouse_x, mouse_y, size_of_script))
-                        
+
+                        (unknown_1, image_index, cursor_status,
+                        unknown_2, frame_count, image_width, image_height, frame_interval, animation_type,
+                        unknown_3, mouse_x, mouse_y,
+                        size_of_header_with_script, size_of_image,
+                        size_of_header_without_script_2, size_of_script) = unpack_from('<16I', data, cur_pos + calcsize('<3I'))
+
+                        self.logger.info('<------>< Image Extraction ><------>\n')
+                        self.logger.info(u'Image index #{}:\n\n\tType: {}\n\tUnknown_1: {}\n\tStatus: {}\n\tUnknown_2: {}\n\tFrame count: {}\n\t\
+Image size: {} x {}\n\tFrame interval: {}\n\tUnknown_3: {}\n\tAnimation type: {}\n\tHotspot position: ({}, {})\n\tScript size: {}\n'
+                                         .format(image_index, pointer_type, unknown_1, cursor_status, unknown_2, frame_count,
+                                                 image_width, image_height, frame_interval, unknown_3, animation_type, mouse_x, mouse_y, size_of_script))
+
+                        self.parameters = {'index'    : image_index,
+                                           'status'   : cursor_status,
+                                           'count'    : frame_count,
+                                           'interval' : frame_interval,
+                                           'hotx'     : mouse_x,
+                                           'hoty'     : mouse_y,
+                                           'anim'     : animation_type
+                                           }
+
                         try:
                                 assert size_of_header_without_script_1 == size_of_header_without_script_2
                                 assert size_of_header_with_script == size_of_header_without_script_1 + size_of_script
                                 assert size_of_header_and_image == size_of_header_with_script + size_of_image
                                 assert size_of_image == image_width * image_height * 4
                         except AssertionError:
-                                logger.write(' !!! Cursor Skipped --> Image #%d Corrupted\n' %image_index)
+                                self.logger.error('Error: image #{:d} corrupted --> conversion skipped\n'.format(image_index))
                                 cur_pos += size_of_header_and_image
                                 continue
-                                
 
-                        ## Get strip image frames and adjust. 
-                        imgstrip = Image.frombytes('RGBA', (image_width, image_height),
-                                                   data[cur_pos + size_of_header_with_script : cur_pos + size_of_header_and_image],
-                                                   'raw', 'BGRA', 0, -1)
-                        
-                        Auxiliary.adjust_image( imgstrip, w_res, h_res, color )
+                        ## Get strip image / strip image frames.
+                        image_strip = Image.frombytes('RGBA', (image_width, image_height),
+                                                      data[cur_pos + size_of_header_with_script : cur_pos + size_of_header_and_image],
+                                                      'raw', 'BGRA', 0, -1)
+                        self.strip_frames(image_strip)
 
-                        ## ---> Parse script. <---
                         ## Create config file.
-                        ##( format for Windows: numberFrames\n rateFrames\n hotspotx\n hotspoty\n scriptORanimationSequence\n )
-                        ##( format for Linux: scriptORanimationSequence\n )
-                        cfg = open('%s/img%d-%d.cfg' %(CFG_DIR, image_index, cursor_status), 'w')
-
-                        if size_of_script > 0:
-                                script_data = data[cur_pos + size_of_header_without_script : cur_pos + size_of_header_with_script].decode('utf-16le')[:-1].replace(';','\n').split()
-                                ## Write script into log file.
-                                logger.write(' Script:\n %s\n' %('\n '.join(script_data)))
-                                ## Eventually expand loops.
-                                if 'end repeat' in script_data:
-                                        script_data = Repeat.loop_expand( script_data )
-                        elif size_of_script == 0:
-                                script_data = None
-                                        
-                        script_parsed = Auxiliary.parser_script( script_data, typeplatf, w_res )
-                        
-                        if not script_parsed:
+                        with open(process.config(self.parameters), 'w') as cfg_file:
                                 if size_of_script > 0:
-                                        ## Script not correctly formatted.
-                                        logger.write(' !!! Script Error --> Fall back to default script animation for img%d-%d\n'
-                                                     %(image_index, cursor_status))
-                                        cfg.seek(0)
+                                        script_data = data[cur_pos + size_of_header_without_script_1 : cur_pos + size_of_header_with_script].decode('utf-16le')[:-1]
+                                        script_data = script_data.replace(';', '\n')
+                                        script_data = script_data.splitlines()
+                                        script_data = [re.sub(r'(?:(?<=\,|-)\s*|\s*(?=\,|-))', '', ' '.join(line.split())) for line in script_data]
+                                        self.script_exist(cfg_file, script_data)
                                 elif size_of_script == 0:
-                                        ## Script not present.
-                                        logger.write(' !!! Script Not Existent --> Fall back to default script animation for img%d-%d\n'
-                                                     %(image_index, cursor_status))
-                                        cfg.seek(0)
-                                        
-                                ## Not use a script but a default animation.
-                                Auxiliary.parser_animation( typeplatf, w_res )
-                                    
-                        cfg.close()
-                        ## Generate X11 cursor (for Linux) from current image.
-                        if typeplatf == 'Linux':
-                                X11Cursor.convert_X11( )
-                                
+                                        self.script_missing(cfg_file)
+
+                        ## Generate.
+                        gen_instance = process.generate(self.parameters, theme_name)
+
                         cur_pos += size_of_header_and_image
-                                
-                ## Generate ANI cursors (for Windows).
-                Main.process_complete( theme_name, typeplatf, comment,w_res,h_res )
-                                
+
+                ## Packing.
+                process.packing(gen_instance, theme_name, comment)
 
 
-        def convert_XP( fileXP, N, w_res, h_res, typeplatf, color ):
-                """ Extracts data from file theme CURXPTHEME, then creates ANIs or X11s. """
-                
-                global CFG_DIR, CURSOR_NAMEMAP, logger, cfg
-                global mouse_x, mouse_y, frame_count, animation_type, frame_interval, image_index, cursor_status
-
-                ## Create directories.
-                Auxiliary.setup( N )
-
-                ## Open Theme file.
+        def convert_XP(self, fileXP):
+                """ Extracts data from theme file `.CurXPTheme`, then creates `.ani`s or `X11`s. """
+                ## Open and read XP theme file.
                 try:
                         archive = ZipFile(fileXP, 'r')
                         scheme = archive.read('Scheme.ini')
-                        scheme = scheme.decode('ascii').replace(';','\r\n').split('\r\n')
-                        ## Correction for multi return carriage.
+                        scheme = scheme.decode('ascii').replace(';', '\r\n').split('\r\n')
+                        ## Fix for multi return carriage.
                         scheme = [line for line in scheme if line != '']
                 except:
-                        logger.write('!!! Conversion Abort --> Scheme.ini not found into %s\n' %fileXP)
-                        logger.close()
+                        self.logger.error('Error: file {} missing "Scheme.ini" --> conversion aborted\n'.format(fileXP))
                         return
-                        
+
                 ## Get description content.
-                descr_data = scheme[scheme.index('[Description]') + 1 ::]
+                try:
+                        comment = scheme[scheme.index('[Description]') + 1 ::]
+                        comment = [line.strip() for line in comment if line.strip() != '']
+                        comment = " - ".join(comment)
+                except ValueError:
+                        comment = 'missing'
+
                 ## Get theme name from file name.
-                theme_name = fileXP.split(os.sep)[-1].split('.')[0]
-                theme_name = theme_name.replace(',','_').replace(' ','')
-                logger.write('Theme Name: %s\n' %theme_name)
-                ## Get comments from description.
-                goodlines = [ line.strip() for line in descr_data if line.strip() != '' ]
-                if goodlines == []:
-                        comment = ''
-                else:
-                        comment = ' - '.join(goodlines)
-                        logger.write('Theme Info: %s\n' %comment) 
-                                
-                ## Creation subdirectories under "targets".
-                Auxiliary.folder_2lev( theme_name )
-                        
-                ## Get data index in 'Scheme.ini'.
-                indx = [ scheme.index(line) for line in scheme if line.startswith('[') and line != '[General]' ]
+                theme_name = os.path.splitext(os.path.basename(fileXP))[0]
+                theme_name = theme_name.replace(',', '_').replace(' ', '')
+                self.logger.info('Theme info:\n\n\t{}\n\n'.format(comment))
 
-                ## Do processing.
-                for j in range(len(indx) - 1):
-                        
-                        if not scheme[indx[j]].endswith('_Script]'):                                         
-                                
+                ## Creation subfolders under `targets` folder.
+                process.create_subfolders(theme_name)
+
+                ## Get "Scheme.ini" data indexes.
+                indexes = [scheme.index(line) for line in scheme if line.startswith('[') and line != '[General]']
+
+                ## Start processing data.
+                for i in range(len(indexes) - 1):
+                        if not scheme[indexes[i]].endswith('_Script]'):
                                 ## Get data image.
-                                imag_data = scheme[indx[j] + 1 : indx[j + 1]]
-                                name = scheme[indx[j]].replace('_Down','').replace('[','').replace(']','')
-                                image_index = [ k for k, v in CURSOR_NAMEMAP.items() if name == v[0] ][0]
+                                image_data = scheme[indexes[i] + 1 : indexes[i + 1]]
+                                name = scheme[indexes[i]].replace('_Down', '').replace('[', '').replace(']', '')
+                                image_index, = [key for key, value in cursor_namemap.items() if name == value[0]]
 
-                                ## To prevent not correct ordering.
-                                (cursor_status, frame_count, frame_interval, animation_type,
-                                mouse_x1, mouse_y1, mouse_x2, mouse_y2, script_status) = [ 'undef' for _ in range(9) ]
-                          
-                                for line in imag_data:
-                                        ident, val = line.split('=')
-                                        if   ident == 'StdCursor': cursor_status = int(val)
-                                        elif ident == 'Frames': frame_count = int(val)
-                                        elif ident == 'Interval': frame_interval = int(val)
-                                        elif ident == 'Animation style': animation_type = int(val)
-                                        elif ident == 'Hot spot x': mouse_x1 = int(val)
-                                        elif ident == 'Hot spot y': mouse_y1 = int(val)
-                                        elif ident == 'Hot spot x2': mouse_x2 = int(val)
-                                        elif ident == 'Hot spot y2': mouse_y2 = int(val)
-                                        elif ident == 'FrameScript': script_status = int(val)
+                                ## Prevents incorrect ordering.
+                                self.parameters = {'index'   : image_index,
+                                                   'status'  : 'StdCursor',
+                                                   'count'   : 'Frames',
+                                                   'interval': 'Interval',
+                                                   'anim'    : 'Animation style',
+                                                   'hotx1'   : 'Hot spot x',
+                                                   'hoty1'   : 'Hot spot y',
+                                                   'hotx2'   : 'Hot spot x2',
+                                                   'hoty2'   : 'Hot spot y2',
+                                                   'script'  : 'FrameScript'
+                                                   }
 
-                                # Impose if lacking.
-                                if cursor_status == 'undef':
-                                        cursor_status = 0
-                                if animation_type == 'undef':
-                                        animation_type = 0
-                                if script_status == 'undef':
-                                        script_status = 0
+                                for line in image_data:
+                                        identifier, assign = line.split('=')
+                                        for key, value in self.parameters.items():
+                                                if value == identifier:
+                                                        self.parameters[key] = int(assign)
 
-                                if (frame_count == 0 or frame_count == 'undef') or (frame_interval == 0 or frame_interval == 'undef') or \
-                                   any([mouse_x1 == 'undef', mouse_y1 == 'undef', mouse_x2 == 'undef', mouse_y2 == 'undef']):
-                                        logger.write(' Cursor #%d Skipped --> Scheme.ini Corrupted\n' %image_index)
+                                ## Impose some parameters if missing.
+                                for key in ['status', 'anim', 'script']:
+                                        if not isinstance(self.parameters[key], int):
+                                                self.parameters[key] = 0
+
+                                ## Some preliminar parameters checks.
+                                if (self.parameters['count'] in [0, 'Frames']) or \
+                                   (self.parameters['interval'] in [0, 'Interval']) or \
+                                   any(isinstance(self.parameters[key], str) for key in ['hotx1', 'hoty1', 'hotx2', 'hoty2']):
+                                        self.logger.error('Error: "Scheme.ini" corrupted --> cursor #{:d} skipped\n'.format(self.parameters['index']))
                                         continue
                                 else:
-                                        ## Put variables like cursorFX style.
+                                        ## Normalize variables like `.cursorFX` style.
                                         # Status.
                                         # for CursorXP --> CURSOR_STATUS_NORMAL = 0, CURSOR_STATUS_ERROR = 1
-                                        cursor_status = 1 - cursor_status
-                                        if scheme[indx[j]].endswith('_Down]'):
-                                                cursor_status = 2
-
+                                        self.parameters['status'] = 1 - self.parameters['status']
+                                        if scheme[indexes[i]].endswith('_Down]'):
+                                                self.parameters['status'] = 2
                                         # Animation.
-                                        # for CursorXP --> ANIMATION_TYPE_LOOP = 0, ANIMATION_TYPE_ALTERNATE = 1
-                                        animation_type = animation_type + 2                                                                                                                                                                                        
+                                        # for CursorXP --> ANIMATION_TYPE_NONE = 0, ANIMATION_TYPE_LOOP = 1, ANIMATION_TYPE_ALTERNATE = 2
+                                        self.parameters['anim'] = (self.parameters['anim'] + 1 if self.parameters['anim'] else self.parameters['anim'])
+                                        ## Fix for different hotspot couples.
+                                        if (self.parameters['hotx1'] != self.parameters['hotx2']) or (self.parameters['hoty1'] != self.parameters['hoty2']):
+                                                self.parameters['hotx'] = min(self.parameters['hotx1'], self.parameters['hotx2'])
+                                                self.parameters['hoty'] = min(self.parameters['hoty1'], self.parameters['hoty2'])
+                                        else:
+                                                self.parameters['hotx'] = self.parameters['hotx1']
+                                                self.parameters['hoty'] = self.parameters['hoty1']
+                                        for key in ['hotx1', 'hotx2', 'hoty1', 'hoty2']:
+                                                self.parameters.pop(key, None)
 
-                                        ## Correction if different couples of hotspots.
-                                        if mouse_x1 == mouse_x2 and mouse_y1 == mouse_y2:
-                                                mouse_x = mouse_x1
-                                                mouse_y = mouse_y1
-                                        elif mouse_x1 != mouse_x2 or mouse_y1 != mouse_y2:
-                                                mouse_x = min(mouse_x1, mouse_x2)
-                                                mouse_y = min(mouse_y1, mouse_y2)
+                                self.logger.info('<------>< Image Extraction ><------>\n')
+                                self.logger.info(u'Image index #{}:\n\n\tStatus: {}\n\tFrame count: {}\n\tFrame interval: {}\n\t\
+Animation type: {}\n\tHotspot position: ({}, {})\n\tScript status: {}\n'
+                                                 .format(self.parameters['index'], self.parameters['status'], self.parameters['count'],
+                                                         self.parameters['interval'], self.parameters['anim'],
+                                                         self.parameters['hotx'], self.parameters['hoty'], self.parameters['script']))
 
-                                        ## Write data in log file.
-                                        logger.write('\nImage #%d:\n\n Status: %u\n Frame count: %u\n Frame interval: %u\n Animation type: %u\n \
-Mouse position: (%u,%u)\n Script status: %u\n' %(image_index, cursor_status, frame_count, frame_interval, animation_type, mouse_x, mouse_y, script_status))
-                                        
-                                ## Extract strip image.
-                                if cursor_status in [1, 2]:
+                                ## Get strip image / strip image frames.
+                                if self.parameters['status'] in [1, 2]:
                                         try:
-                                                imgstrip = Image.open(BytesIO(archive.read( name + '.png' )))
+                                                image_strip = Image.open(BytesIO(archive.read(name + '.png')))
                                         except:
-                                                logger.write(' !!! Cursor #%d Skipped --> Image Missing\n' %image_index)
+                                                self.logger.error('Error: strip image missing --> cursor #{:d} skipped\n'.format(self.parameters['index']))
                                                 continue
-                                elif cursor_status == 0:
-                                        logger.write(' !!! Cursor #%d Skipped --> Image Missing\n' %image_index)
+                                elif self.parameters['status'] == 0:
+                                        self.logger.error('Error: strip image missing --> cursor #{:d} skipped\n'.format(self.parameters['index']))
                                         continue
+                                self.strip_frames(image_strip)
 
-                                ## Get strip image frames and adjust.
-                                Auxiliary.adjust_image( imgstrip, w_res, h_res, color )
+                                ## Create config file (no script).
+                                if self.parameters['script'] == 0:
+                                        with open(process.config(self.parameters), 'w') as cfg_file:
+                                                self.script_missing(cfg_file)
+                                        ## Generate.
+                                        gen_instance = process.generate(self.parameters, theme_name)
 
-                                ## Create config file with a default animation.
-                                if script_status == 0:
-                                        cfg = open('%s/img%d-%d.cfg' %(CFG_DIR, image_index, cursor_status), 'w')
-                                        logger.write(' !!! Script Not Existent --> Fall back to default script animation for img%d-%d\n'
-                                                     %(image_index, cursor_status))
-                                        Auxiliary.parser_animation( typeplatf, w_res )
-                                        cfg.close()
-                                        ## Generate X11 cursor (for Linux) from current image.
-                                        if typeplatf == 'Linux':
-                                                X11Cursor.convert_X11( )                                                                                                   
                         else:
-                                ## ---> Parse script. <---
-                                ## script data follows cursor data section, so variables are already loaded.
-                                if script_status == 1:
-                                        ## Create config file.
-                                        cfg = open('%s/img%d-%d.cfg' %(CFG_DIR, image_index, cursor_status), 'w')                                                                       
-                                        ## Get script data.
-                                        script_data = scheme[indx[j] + 1 : indx[j + 1]]
-                                        
-                                        ## Write script in log file.
-                                        logger.write(' Script:\n %s\n' %('\n '.join(script_data)))
-                                        ## Eventually expand loops.
-                                        if 'end repeat' in script_data:
-                                                script_data = Repeat.loop_expand( script_data )
-                                        
-                                        script_parsed = Auxiliary.parser_script( script_data, typeplatf, w_res )
+                                ## Create config file (with script).
+                                if self.parameters['script'] == 1:
+                                        with open(process.config(self.parameters), 'w') as cfg_file:
+                                                script_data = scheme[indexes[i] + 1 : indexes[i + 1]]
+                                                script_data = [re.sub(r'(?:(?<=\,|-)\s*|\s*(?=\,|-))', '', ' '.join(line.replace(';', '').split()))
+                                                               for line in script_data]
+                                                self.script_exist(cfg_file, script_data)
+                                        ## Generate.
+                                        gen_instance = process.generate(self.parameters, theme_name)
 
-                                        if not script_parsed: 
-                                                ## Script not correctly formatted.
-                                                logger.write(' !!! Script Error --> Fall back to default script animation for img%d-%d\n'
-                                                             %(image_index, cursor_status))
-                                                cfg.seek(0)
-                                                        
-                                                ## Not a script but use a default animation.
-                                                Auxiliary.parser_animation( typeplatf, w_res )   
-                                        cfg.close()
-                                        
-                                        ## Generate X11 cursor (for Linux) from current image.
-                                        if typeplatf == 'Linux':
-                                                X11Cursor.convert_X11( )
-                                                        
-                ## Generate ANI cursors (for Windows).
-                Main.process_complete( theme_name, typeplatf, comment,w_res,h_res )             
-                
+                ## Packing.
+                process.packing(gen_instance, theme_name, comment)
 
-## ____________________
-##| Create X11 cursor  |------------------------------------------------------------------------------------------------------------------------------------
-##|____________________| 
+
+## ___________________________________
+##| X11 cursors conversion functions  |---------------------------------------------------------------------------------------------------------------------
+##|___________________________________|
 ##
-class X11Cursor(object):
 
-        def convert_X11( ):
-                """ Creates X11 cursors, using xcursorgen or byte-to-byte writer. """
-                global CFG_DIR, OUTPUT_CURS_DIR
-                global image_index, cursor_status, CURSOR_NAMEMAP, logger
-                                
-                ## Get elements from namemap.
-                (outfilename, links) = CURSOR_NAMEMAP[image_index][2:4]
-                ## Pressed cursors management.
-                ## for CursorFX --> CURSOR_STATUS_NORMAL = 1, CURSOR_STATUS_PRESSED = 2
-                if cursor_status == 2: 
+class X11Cur(object):
+        def __init__(self, parameters):
+                self.parameters = parameters
+                self.logger = logging.getLogger('Metamorphosis')
+
+        def path_output(self):
+                """ Defines output file path. """
+                try:
+                        custom_output = os.path.join(process.outputcurs_dir, self.parameters['custom'])
+                        os.makedirs(custom_output, exist_ok = True)
+                        return custom_output
+                except:
+                        return process.outputcurs_dir
+
+        def theme_file(self, theme_name, description):
+                """ Creates "index.theme" file. """
+                description = re.sub(r'[^\x20-\x7e]', '', description)
+                themefile = "[Icon Theme]\n" + \
+                            "Name={}\n".format(theme_name) + \
+                            "Comment={}\n-{}\n".format(description, label) + \
+                            "Example=default\n" + \
+                            "Inherits=core"
+
+                with open(os.path.join(process.output_dir, 'index.theme'), 'w') as file:
+                        file.write(themefile)
+                with open(os.path.join(process.output_dir, 'cursor.theme'), 'w') as file:
+                        file.write(themefile)
+
+        def convert(self):
+                """ Creates `X11` cursors, using `xcursorgen` or byte-by-byte writer. """
+                self.logger.info('\n<------>< `X11` files creation ><------>\n')
+
+                ## Get elements from cursor namemap.
+                outfilename, links = cursor_namemap[self.parameters['index']][2 : 4]
+                ## Manage pressed cursors.
+                ## for CursorFX / CursorXP --> CURSOR_STATUS_NORMAL = 1, CURSOR_STATUS_PRESSED = 2
+                if self.parameters['status'] == 2:
                         outfilename += '_pressed'
                         links = []
-                
-                ## Try xcursorgen job.
-                path_cfg = ' "%s/img%d-%d.cfg"' %(CFG_DIR, image_index, cursor_status)
-                path_out = ' "%s/%s"' %(OUTPUT_CURS_DIR, outfilename)
-                proc = Popen( 'xcursorgen' + path_cfg + path_out, shell = True, stdout = PIPE, stderr = PIPE )
-                out, err = proc.communicate()
-                retcode = proc.wait()
-                       
-                if retcode != 0:
-                        err = ' '.join(out.decode('ascii').splitlines())
-                        if err == '':
-                                err = 'xcursorgen not installed or generic process error'
-                        logger.write(" \n Can't convert cursor #%d by xcursorgen --> %s\n" %(image_index, err))
-                                                    
-                for link in links:
-                        try:
-                            os.symlink(outfilename, '%s/%s' %(OUTPUT_CURS_DIR, link))
-                        except:
-                            logger.write(' Failed in creating symlink: "%s" --> "%s"\n' %(outfilename, link))
-                logger.write('\n X11 cursor "%s" and Symlinks --> Done !!\n' %outfilename)
-                            
 
-        def pack_X11( themnam, desc ):
-                """ Packages X11 theme. """
-                global OUTPUT_DIR, OUTPUT_BASE_DIR, TMP_DIR, logger
-                
-                ## Create index.theme file.
-                themefilestr = "[Icon Theme]\n" +\
-                                "Name=%s\n" %themnam +\
-                                "Comment=%s\n-*Converted by Metamorphosis, Copyright 2018\n" %desc +\
-                                "Example=default\n" +\
-                                "Inherits=core"
-                
-                with open('%s/index.theme' %OUTPUT_DIR, 'w') as ft:
-                        ft.write(themefilestr)
-                with open('%s/cursor.theme' %OUTPUT_DIR, 'w') as ft:
-                        ft.write(themefilestr)
-                        
-                ## Create archive.
-                path_arch = ' "%s/%s.tar.gz"' %(TMP_DIR, themnam)
-                path_where = ' "%s" "%s"' %(OUTPUT_BASE_DIR, themnam)
-                proc = Popen( 'tar -a -cf' + path_arch + ' -C' + path_where , shell = True, stdout = PIPE, stderr = PIPE )
+                ## Try `xcursorgen` job.
+                path_cfg = ' "' + process.config(self.parameters) + '"'
+                path_outcurs = ' "' + os.path.join(self.path_output(), outfilename) + '"'
+                proc = Popen('xcursorgen' + path_cfg + path_outcurs, shell = True, stdout = PIPE, stderr = PIPE)
                 out, err = proc.communicate()
-                retcode = proc.wait()
-                
-                if retcode != 0:
+                code = proc.wait()
+
+                if code != 0:
                         err = ''.join(out.decode('ascii').splitlines())
-                        if err == ' ':
-                                err = 'tar not installed or generic process error'
-                        logger.write(' "%s" packaging skipped --> %s\n' %(themnam, err)) 
-                
-                logger.close()
-                
+                        if err == '':
+                                err = '`xcursorgen` not installed or `xcursorgen` process trouble\n'
+                        self.logger.error("Error: can't convert cursor #{:d} by `xcursorgen` --> {}".format(self.parameters['index'], err))
+                else:
+                        ok = True
+                        for link in links:
+                                while True:
+                                        path = os.path.join(self.path_output(), link)
+                                        try:
+                                                os.symlink(outfilename, path)
+                                                break
+                                        except FileExistsError:
+                                                os.remove(path)
+                                        except:
+                                                self.logger.error('Error: failed creating symlink: "{}" --> "{}"\n'.format(outfilename, link))
+                                                ok = False
+                                                break
+                        if ok:
+                                self.logger.info('X11 cursor "{}" and symlinks ----> Done !!\n'.format(outfilename))
+
+        def pack(self, theme_name, description):
+                """ Packages `X11` theme. """
+                self.theme_file(theme_name, description)
+                ## Create archive.
+                path_archive = ' "' + os.path.join(process.options['output'], "{}.tar.gz".format(theme_name)) + '"'
+                path_where = ' "{}" "{}"'.format(process.targets_dir, theme_name)
+
+                proc = Popen('tar -a -cf' + path_archive + ' -C' + path_where , shell = True, stdout = PIPE, stderr = PIPE)
+                out, err = proc.communicate()
+                code = proc.wait()
+
+                if code != 0:
+                        err = ''.join(out.decode('ascii').splitlines())
+                        if err == '':
+                                err = '`tar` not installed or `tar` process trouble\n'
+                        self.logger.error('Error: "{}" packaging skipped --> {}'.format(theme_name, err))
 
 
-## ___________________________
-##| Image conversion to Icon  |----------------------------------------------------------------------------------------------------------------------------
-##|___________________________| 
+## _________________________________
+##| MS `.cur` conversion functions  |------------------------------------------------------------------------------------------------------------------------
+##|_________________________________|
 ##
-class Icon(object):
-    
-        def convert( ):
-                """ ICO conversion manager. """
-                global ORIGINAL_DIR, logger
-                
-                def natural_key(string_):
-                        """ Natural sorting function. """
-                        return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_)]
-                
-                listfiles = [file for file in os.listdir(ORIGINAL_DIR) if "_" in file]
-                listfiles = sorted(listfiles, key = natural_key)
 
-                logger.write('\n<------>< Icons Creation ><------>\n')
-                index = []
-                for name_ima in listfiles:
-                        name_ico = name_ima.replace('.png','.ico')
-                        num = re.search('img(.*)-', name_ima).group(1)
-                        if num not in index:
-                                index.append(num)
-                                logger.write('\nConversion to Icon of set Images index: %s\n' %num)
-                        message = Icon.exec_convert( name_ico, name_ima )
-                        logger.write(' ' + message + '\n')
+class MSCur(object):
+        def __init__(self, parameters):
+                self.parameters = parameters
+                self.logger = logging.getLogger('Metamorphosis')
+
+        def natural(self, string):
+                """ Natural sorting function. """
+                return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string)]
+
+        def convert(self):
+                """ Executes Iconolatry for `.png`s to `.cur`s conversion. """
+                self.logger.info('\n<------>< Microsoft `.cur` files creation ><------>')
+                pngs = [[os.path.join(process.original_dir, png)] for png in os.listdir(process.original_dir)
+                        if "_" in png and re.search('img(.*)-(.*)_', png).groups() == (str(self.parameters['index']), str(self.parameters['status']))]
+                lung = len(pngs)
+                self.logger.info('\nConversion to `.cur` of set images index: {}, with status: {}\n'
+                                 .format(self.parameters['index'], self.parameters['status']))
+
+                encocur = Iconolatry.Encode(pngs,
+                                            paths_icocur = [process.icocur_dir] * lung,
+                                            names_icocur = [''] * lung,
+                                            formats_icocur = [('.cur', self.parameters['hotx'], self.parameters['hoty'])] * lung)
+
+                keys = sorted(encocur.all_icocur_written.keys(), key = self.natural)
+                sorted_encocur = OrderedDict((k, encocur.all_icocur_written[k]) for k in keys)
+
+                first = list(sorted_encocur.values())[0][0]
+                self.logger.info('\tMode: {} \n\tDepth: {}\n\tImage size: {}\n\tHotspot position: ({}, {})\n'
+                                 .format(first['mode'], first['depth'], first['size'], first['hotspot_x'], first['hotspot_y']))
 
 
-        def exec_convert( name_ico, name_ima ):
-                """ Executes Iconolatry for conversion PNGs to ICOs. """
-                global ICOCUR_DIR, ORIGINAL_DIR
-
-                path_icon = [ ICOCUR_DIR + os.sep + name_ico ]
-                path_image = [ [ORIGINAL_DIR + os.sep + name_ima] ]
-                message = Iconolatry.WRITER().ToIco( False, path_image, path_icon )
-
-                return message
-                
-
-## ____________________
-##| Create ANI cursor  |-----------------------------------------------------------------------------------------------------------------------------------
-##|____________________| 
+## _________________________________
+##| MS `.ani` conversion functions  |------------------------------------------------------------------------------------------------------------------------
+##|_________________________________|
 ##
-class ANICursor(object):
-        
-        def pack_ANI( name_arch, comments ):
-                """ Packages ANI theme. """
-                global TMP_DIR, OUTPUT_BASE_DIR
-                
-                ## Create file .inf.
-                ANICursor.inf_file( name_arch, comments )
-                ## Package.
-                input_dir = OUTPUT_BASE_DIR + os.sep + name_arch
-                zipname = TMP_DIR + os.sep + name_arch
-                make_archive(zipname, 'zip', root_dir = input_dir, base_dir = None)
-                
 
-        def find_inamiart( data ):
-                """ Finds 'INAM' and 'IART' string values. """
-                try:
-                        pos_inam = re.search(b'INAM', data).start()
-                        try:
-                                pos_iart = re.search(b'IART', data).start()
-                                if pos_inam < pos_iart:
-                                        ## 'INAM' - 'IART'. 
-                                        inam = data[pos_inam + 8 : pos_iart]
-                                        offiart, = unpack_from('<H', data[pos_iart + 4 : pos_iart + 8])
-                                        iart = data[pos_iart + 8 : pos_iart + 8 + offiart]
-                                else:
-                                        ## 'IART' - 'INAM'.
-                                        iart = data[pos_iart + 8 : pos_inam]
-                                        offinam, = unpack_from('<H', data[pos_inam + 4 : pos_inam + 8])
-                                        inam = data[pos_inam + 8 : pos_inam + 8 + offinam]
-                        except AttributeError:
-                                ## 'INAM' (only).
-                                offinam, = unpack_from('<H', data[pos_inam + 4 : pos_inam + 8])
-                                inam = data[pos_inam + 8 : pos_inam + 8 + offinam]
-                                pass
-                except AttributeError:
-                        try:
-                                ## 'IART' (only).
-                                pos_iart = re.search(b'IART', data).start()
-                                offiart, = unpack_from('<H', data[pos_iart + 4 : pos_iart + 8])
-                                iart = data[pos_iart + 8 : pos_iart + 8 + offiart]
-                        except AttributeError:
-                                ## no INAM, no IART.
-                                inam = iart = ''
-                                pass
-                                                        
-                comment = inam + iart
-                return comment
-                
+class MSAni(object):
+        def __init__(self, parameters):
+                self.parameters = parameters
+                self.logger = logging.getLogger('Metamorphosis')
 
-        def find_rateseq( data ):
-                """ Finds 'rate' and 'seq ' values. """
-                try:
-                        pos_rate = re.search(b'rate', data).start()
-                        try:
-                                pos_seq = re.search(b'seq ', data).start()
-                                if pos_rate < pos_seq:
-                                        ## 'rate' - 'seq '.
-                                        rates = data[pos_rate + 8 : pos_seq]
-                                        offseq, = unpack_from('<H', data[pos_seq + 4 : pos_seq + 8])
-                                        seqs = data[pos_seq + 8 : pos_seq + 8 + offseq]
-                                else:
-                                        ## 'seq ' - 'rate'.
-                                        seqs = data[pos_seq + 8 : pos_rate]
-                                        offrate, = unpack_from('<H', data[pos_rate + 4 : pos_rate + 8])
-                                        rates = data[pos_rate + 8 : pos_rate + 8 + offrate]
-                                        
-                                iseqs = [ unpack_from('<L', seqs[ii : 4 + ii]) for ii in range(0, len(seqs), 4) ]
-                                iseqs = [ seq[0] for seq in iseqs ]
-                        except AttributeError:
-                                ## 'rate' (only).
-                                iseqs = None
-                                offrate, = unpack_from('<H', data[pos_rate + 4 : pos_rate + 8])
-                                rates = data[pos_rate + 8 : pos_rate + 8 + offrate]
-                                pass
-                        
-                        irates = [ unpack_from('<L', rates[ii : 4 + ii]) for ii in range(0, len(rates), 4) ]
-                        irates = [ rate[0] for rate in irates ]
-                        irates = [ int(0.5 * ceil(2.0 * (int(irate) * (1000/60)))) for irate in irates ]  # converted from jiffies to ms.   
-
-                except AttributeError:
-                        irates = None
-                        try:
-                                ## 'seq ' (only).
-                                pos_seq = re.search(b'seq ', data).start()
-                                offseq, = unpack_from('<H', data[pos_seq + 4 : pos_seq + 8])
-                                seqs = data[pos_seq + 8 : pos_seq + 8 + offseq]
-                                iseqs = [ unpack_from('<L', seqs[ii : 4 + ii]) for ii in range(0, len(seqs), 4) ]
-                                iseqs = [ seq[0] for seq in iseqs ]
-                        except AttributeError:
-                                ## no 'rate', no 'seq '.
-                                iseqs = None
-                                pass
-                        
-                return irates, iseqs
-
-              
-        def inf_file( themnam, comments ):
-                """ Creates .inf file for Windows installation. """
-                global OUTPUT_CURS_DIR, CURSOR_NAMEMAP
-                
-                ## Create install.inf file.
-                schemereg = ['pointer','help','work','busy','cross','text','hand','unavailiable','vert','horz','dgn1','dgn2','move','alternate','link']
-                schemecur = [ v[1] for k, v in CURSOR_NAMEMAP.items() if k in [i for j in (range(9), range(10,17,2), range(17,19)) for i in j] ]
-
-                stringcur = ''
-                for reg, cur in zip(schemereg, schemecur):
-                        if reg in ['unavailiable', 'alternate', 'link']:
-                                if reg == 'unavailiable':
-                                        stringcur += reg + '= "' + cur + '.ani"\n'
-                                elif reg == 'alternate':
-                                        stringcur += reg + '\t= "' + cur + '.ani"\n'
-                                elif reg == 'link':
-                                        stringcur += reg + '\t\t= "' + cur + '.ani"'
-                        else:
-                                stringcur += reg + '\t\t= "' + cur + '.ani"\n'
-                       
-                schemeinf = "; %s Cursors Pack installation file\n" %themnam +\
-                                '; Right click on the file "Install.inf" and select "Install". Then in the Mouse control panel apply set cursors.\n\n' +\
-                                "[Version]\n" + "signature=""$CHICAGO$""\n\n" +\
-                                "[DefaultInstall]\n" + "CopyFiles = Scheme.Cur, Scheme.Txt\n" +\
-                                                       "AddReg    = Scheme.Reg\n\n" +\
-                                "[DestinationDirs]\n" + 'Scheme.Cur = 10,"%CUR_DIR%"\n' +\
-                                                        'Scheme.Txt = 10,"%CUR_DIR%"\n\n' +\
-                                "[Scheme.Reg]\n" + 'HKCU,"Control Panel\\Cursors\\Schemes","%SCHEME_NAME%",,"' +\
-                                                   ''.join('%10%\\%CUR_DIR%\\%{}%,'.format(val) for val in schemereg[0:len(schemereg)-1]) +\
-                                                   '%10%\\%CUR_DIR%\\%' + schemereg[-1] + '%"\n\n' +\
-                                "; --Common Information\n\n" +\
-                                "[Scheme.Cur]\n" + '"' + '.ani"\n"'.join(schemecur) + '.ani"\n\n' +\
-                                "[Scheme.Txt]\n" + 'Readme.txt\n\n' +\
-                                "[Strings]\n" + 'CUR_DIR\t\t= "Cursors\\%s"\n' %themnam +\
-                                                'SCHEME_NAME\t= "%s"\n' %themnam + stringcur
-
-                with open('%s/Install.inf' %OUTPUT_CURS_DIR, 'w') as f:
-                        f.write(schemeinf)
-                with open('%s/Readme.txt' %OUTPUT_CURS_DIR, 'w') as f:
-                        f.write(comments + '\n-*Converted by Metamorphosis, Copyright 2018')
-
-
-        def int_to_hex( value, byteorder = 'little', padbytes = 2 ):
+        def int2byte(self, value, byteorder = 'little', padbytes = 4):
                 """ Transforms an integer into his hex representation (little or big endian).
-                    Usually padbytes = 1 (8-bit), 2 (16-bit), 4 (32-bit), 8 (64-bit). """
+                    Usually padbytes = 1 (8-bit), 2 (16-bit), 4 (32-bit), 8 (64-bit).
+                """
                 lung = (value.bit_length() + 7) // 8
                 ## Add padding, if needs.
                 pad = padbytes - lung
-                if pad < 0: pad = 0
-                ## Create hex representation.
-                a = value.to_bytes( lung + pad, byteorder = byteorder ) or b'\0'
-                hexstring = hexlify(a).decode('ascii')
-                return hexstring
-        
+                if pad < 0:
+                        pad = 0
+                ## Create bytes representation.
+                return value.to_bytes(lung + pad, byteorder = byteorder) or b'\0'
 
-        def change_hex( data, ini_pos_to_change, fin_pos_to_change, value_to_change ): 
-                """ Changes hexadecimal values.
-                    If 'ini_pos_to_change' is equal to 'fin_pos_to_change' then 'value_to_change' is a single string ('xx'),
-                    if positions to change are more then one, 'values_to_change' is a list of strings ('xxyyzz' --> ['xx','yy','zz']). """
-                hex_ini = hexlify(data).decode('ascii')
-                s = list(hex_ini)
-                ## Modify digits.
-                if ini_pos_to_change == fin_pos_to_change:
-                        s[ini_pos_to_change] = value_to_change
-                elif ini_pos_to_change < fin_pos_to_change:
-                        s[ini_pos_to_change : fin_pos_to_change] = list(value_to_change)
-                        
-                hex_mod = unhexlify(''.join(s))
-                return hex_mod
-        
-        
-        def write_icon( fileread, size, f_ani, hotx, hoty ):
-                """ Writes ICO data with modifications into ANI file. """
-                with open(fileread, 'rb') as f_icon:
-                        for line, _ in enumerate(range(0, size, 16)):
-                                data = f_icon.read(16)
-                                ## Modifications into icon files to transform ICO into CUR.
-                                if line == 0:
-                                        ## idType modification.
-                                        data = ANICursor.change_hex( data, ini_pos_to_change = 4, fin_pos_to_change = 8, value_to_change = '0200' )
-                                        ## hotspotX modification.
-                                        data = ANICursor.change_hex( data, ini_pos_to_change = 20, fin_pos_to_change = 24, value_to_change = hotx )
-                                        ## hotspotY modification.
-                                        data = ANICursor.change_hex( data, ini_pos_to_change = 24, fin_pos_to_change = 28, value_to_change = hoty )
-                                ## Write icon data into ANI file.
-                                f_ani.write(data)
-                return f_ani
-        
+        def ms2jiffies(self, value):
+                """ Converts from ms to jiffies. """
+                return int(0.5 * ceil(2.0 * (value / (1000 / 60))))
 
-        def write_ani( filewrite, header_ani, config_data, header_icon, hotspotX, hotspotY ):
-                """ Writes ANI file. """
-                with open(filewrite, 'wb+') as f_ani:
-                        ## Write ANI header's into ani file.
-                        f_ani.write( unhexlify(header_ani) )
-                        ## Write 'icon' identifier with his size identifier and data,
-                        ## for all icons to put into ANI file.
-                        for element in config_data[4::]:
-                                path_icon = element.split(' ')[0]
-                                iconSize = os.path.getsize(path_icon)
-                                hex_iconSize = ANICursor.int_to_hex( iconSize, byteorder = 'little', padbytes = 4 )
-                                f_ani.write( unhexlify(header_icon + hex_iconSize) )
-                                f_ani = ANICursor.write_icon( path_icon, iconSize, f_ani, hotspotX, hotspotY )
-                                
-                        ## Fix riffSize with the correct value after writing ANI file.
-                        riffSize = f_ani.tell() - 8                                
-                        f_ani.seek(4)     
-                        hex_riffSize = ANICursor.int_to_hex( riffSize, byteorder = 'little', padbytes = 4 )
-                        f_ani.write( unhexlify(hex_riffSize) )
-                        ## Fix listSize with the correct value after writing all icons into ANI file.
-                        f_ani.seek(0)
-                        offset = re.search(b'fram', f_ani.read()).start() - 4
-                        listSize = riffSize - (offset - 4)
-                        hex_listSize = ANICursor.int_to_hex( listSize, byteorder = 'little', padbytes = 4 )
-                        f_ani.seek(offset)
-                        f_ani.write( unhexlify(hex_listSize) )
-                       
-                        
-        def convert_ANI( w_res, h_res, theme_name ):
-                """ Creates ANI cursor, writing it byte-to-byte. """
-                global CFG_DIR, OUTPUT_CURS_DIR, CURSOR_NAMEMAP
+        def jiffies2ms(self, value):
+                """ Converts from jiffies to ms. """
+                return int(0.5 * ceil(2.0 * (value * (1000 / 60))))
 
-                logger.write('\n<------>< ANI Cursors Creation ><------>\n\n')
-                                             
-                ## Define global data for 'anih'.
-                anihSize = cbSize =     ANICursor.int_to_hex( 36, byteorder = 'little', padbytes = 4 )
-                iWidth =                ANICursor.int_to_hex( int(w_res), byteorder = 'little', padbytes = 4 )
-                iHeight =               ANICursor.int_to_hex( int(h_res), byteorder = 'little', padbytes = 4 )
-                iBitCount =             ANICursor.int_to_hex( 32, byteorder = 'little', padbytes = 4 )
-                nPlanes =               ANICursor.int_to_hex( 1, byteorder = 'little', padbytes = 4 )
-                bfAttributes =          ANICursor.int_to_hex( 3, byteorder = 'little', padbytes = 4 )
+        def unique(self, sequence):
+                """ Finds ordered unique values. """
+                seen = set()
+                seen_add = seen.add
+                return [x for x in sequence if not (x in seen or seen_add(x))]
 
-                ## Define data for IART.                
-                iart = b'*Converted by Metamorphosis, Copyright 2018*' # note: need even length.
-                iart = hexlify(iart).decode('ascii')
-                iart_int = int(len(iart)/2)
-                iartSize = ANICursor.int_to_hex( iart_int, byteorder = 'little', padbytes = 4 )
+        def even(self, string):
+                """ Makes even a byte string. """
+                bytes_string = bytes(string, 'utf-8')
+                if len(bytes_string) % 2 != 0:
+                        bytes_string += b'*'
+                return bytes_string
 
-                ## Define hex representation of common tags.
-                ## riffSize and listSize are initially put to zero.
-                header_dict = {'RIFF':'52494646',       'riffSize':'00000000',  'ACON':'41434f4e',      'anih':'616e6968',
-                               'rate':'72617465',       'seq ':'73657120',
-                               'INFO':'494e464f',       'INAM':'494e414d',      'IART':'49415254',
-                               'LIST':'4c495354',       'listSize':'00000000',  'fram':'6672616d',      'icon':'69636f6e'
-                              }
+        def pack(self, theme_name, description):
+                """ Packages `.ani` theme. """
+                ## Create file `.inf`.
+                self.inf_file(theme_name, description)
+                ## Do package.
+                make_archive(os.path.join(process.options['output'], theme_name), 'zip',
+                             root_dir = process.output_dir,
+                             base_dir = None)
 
-                ## Get parameters using config files.
-                cfgs = os.listdir(CFG_DIR)
+        def inf_file(self, theme_name, description):
+                """ Creates `.inf` file for Windows installation. """
+                scheme_reg = ['pointer', 'help', 'work', 'busy', 'cross',
+                              'text', 'hand', 'unavailiable', 'vert', 'horz',
+                              'dgn1', 'dgn2', 'move', 'alternate', 'link']
 
-                for cfg in cfgs:
-                        with open(CFG_DIR + '/%s' %cfg, 'r') as f_cfg:  
-                                config_data = f_cfg.readlines()
-                        config_data = [ line.replace('\n','') for line in config_data]
+                scheme_cur = [value[1] for key, value in cursor_namemap.items() if key in list(range(9)) + list(range(10,17,2)) + list(range(17,19))]
+                string_cur = ''
+                align = len(max(scheme_reg, key = len))
+                for reg, cur in zip(scheme_reg, scheme_cur):
+                        string_cur += '{:<{align}} = "{}.ani"\n'.format(reg, cur, align = align)
 
-                        ## Define name and path of ANI file.
-                        im, st = re.search('img(.*)-(.*).cfg', cfg).groups()
-                        name_ani = CURSOR_NAMEMAP[int(im)][1]
-                        if int(st) == 2:
-                                name_ani += '_pressed'
-                                
-                        filewrite = OUTPUT_CURS_DIR + os.sep + name_ani + '.ani'
-                        
-                        ## Define remaining data for 'anih'.
-                        nFrames = nSteps =      ANICursor.int_to_hex( int(config_data[0]), byteorder = 'little', padbytes = 4 )
-                        ## Convert rate from ms to jiffies.
-                        iDispRate = int(0.5 * ceil(2.0 * (int(config_data[1]) / (1000/60))))
-                        iDispRate =             ANICursor.int_to_hex( iDispRate, byteorder = 'little', padbytes = 4 )
-                        hotspotX =              ANICursor.int_to_hex( int(config_data[2]), byteorder = 'little', padbytes = 2 )
-                        hotspotY =              ANICursor.int_to_hex( int(config_data[3]), byteorder = 'little', padbytes = 2 )
+                scheme_inf = '; "{}" cursors pack installation file\n'.format(theme_name) + \
+                             '; {}\n; {}\n'.format(description, label) + \
+                             '; Right click on the file "Install.inf" and select "Install". Then in the Mouse control panel apply set cursors.' + '\n\n' + \
+                             "[Version]\n" + "signature=""$CHICAGO$""" + '\n\n' + \
+                             "[DefaultInstall]\n" + "CopyFiles = Scheme.Cur, Scheme.Txt\n" + \
+                                                    "AddReg    = Scheme.Reg" + '\n\n' + \
+                             "[DestinationDirs]\n" + 'Scheme.Cur = 10,"%CUR_DIR%"\n' + \
+                                                     'Scheme.Txt = 10,"%CUR_DIR%"' + '\n\n'+ \
+                             "[Scheme.Reg]\n" + 'HKCU,"Control Panel\\Cursors\\Schemes","%SCHEME_NAME%",,"' + \
+                                                ','.join('%10%\\%CUR_DIR%\\%{}%'.format(reg) for reg in scheme_reg) + '\n\n' + \
+                             "; --Common Information\n\n" + \
+                             "[Scheme.Cur]\n" + '\n'.join('{}.ani'.format(cur) for cur in scheme_cur) + '\n\n' + \
+                             "[Scheme.Txt]" + '\n\n' + \
+                             "[Strings]\n" + '{:<{align}} = "Cursors\\{}"\n'.format('CUR_DIR', theme_name, align = align) + \
+                                             '{:<{align}} = "{}"\n'.format('SCHEME_NAME', theme_name, align = align) + \
+                                             '{}'.format(string_cur)
 
-                        ## Define data for INAM.
-                        inam = theme_name + '-' + name_ani
-                        inam_byt = hexlify(bytes(inam, 'utf-8')).decode('ascii')
-                        ## Need even length.
-                        if len(inam) % 2 != 0:
-                                inam = inam_byt + '2a'
-                        else:
-                                inam = '2a' + inam_byt + '2a'
-                        
-                        inam_int = int(len(inam)/2)
-                        inamSize = ANICursor.int_to_hex( inam_int, byteorder = 'little', padbytes = 4 )
+                with open(os.path.join(process.output_dir, 'Install.inf'), 'w') as file:
+                        file.write(scheme_inf)
 
-                        ## Define size of all tag INFO.
-                        ## header_dict['IART'] + iartSize = 4 + 4 = 8
-                        ## header_dict['INFO'] + header_dict['INAM'] + inamSize = 4 + 4 + 4 = 12
-                        infoSize = inam_int + iart_int + 8 + 12
-                        infoSize = ANICursor.int_to_hex( infoSize, byteorder = 'little', padbytes = 4 )
-            
-                        ## Start to construct ANI Header.
-                        header_ani =  header_dict['RIFF']       + header_dict['riffSize']       + header_dict['ACON']
-                        header_ani += header_dict['LIST']       + infoSize
-                        header_ani += header_dict['INFO']        
-                        header_ani += header_dict['INAM']       + inamSize                      + inam
-                        header_ani += header_dict['IART']       + iartSize                      + iart                              
-                        header_ani += header_dict['anih']
-                        header_ani += anihSize                  + cbSize                        + nFrames               + nSteps
-                        header_ani += iWidth                    + iHeight                       + iBitCount             + nPlanes
-                        header_ani += iDispRate                 + bfAttributes
+        def find_value(self, data, position):
+                """ Gets chunk values. """
+                offset, = unpack_from('<H', data[position + 4 : position + 8])
+                value = data[position + 8 : position + 8 + offset]
 
-                        ## Continue to construct ANI Header with tag 'rate' and 'seq '.
-                        seqSize = rateSize = ANICursor.int_to_hex( int(config_data[0]) * 4, byteorder = 'little', padbytes = 4 )
-                        header_ani_rate = header_dict['rate']    + rateSize
-                        header_ani_seq =  header_dict['seq ']    + seqSize
-                                        
-                        for element in config_data[4::]:
-                                path_icon, framrate = element.split(' ')
-                                seq = re.search('_(.*).ico', path_icon.split('/')[-1]).group(1)
-                                ## Convert rate from ms to jiffies.
-                                framrate = int(0.5 * ceil(2.0 * (int(framrate) / (1000/60))))
-                                header_ani_rate += ANICursor.int_to_hex( framrate, byteorder = 'little', padbytes = 4 )
-                                header_ani_seq +=  ANICursor.int_to_hex( int(seq), byteorder = 'little', padbytes = 4 )       
+                return value
 
-                        header_ani +=   header_ani_rate + header_ani_seq
-
-                        ## Continue to construct ANI Header with tag 'icon'.
-                        header_ani +=   header_dict['LIST']     + header_dict['listSize']       + header_dict['fram']
-                        
-                        header_icon =   header_dict['icon'] 
-
-                        ## Do process.
-                        ANICursor.write_ani( filewrite, header_ani, config_data, header_icon, hotspotX, hotspotY )
-                        logger.write(' %s ----> Done !!\n' %filewrite)
-                        
-                logger.close()
-                
-               
-
-## ___________________________________
-##| Utilities for cursors convertion  |---------------------------------------------------------------------------------------------------------------------
-##|___________________________________| 
-## 
-class Utility(object):
-
-        def convert_ANI_to_X11( pathpointer, N, folder, w_res, h_res, color, comment_list ):
-                """ Creates PNGs from ANI or CUR cursor, then produces X11 cursor. """
-                
-                global ORIGINAL_DIR, CFG_DIR, CURSOR_NAMEMAP, logger, ICOCUR_DIR
-                global mouse_x, mouse_y, image_index, cursor_status, frame_count
-
-                ## Create directories.
-                Auxiliary.setup( N )
-                
-                ## Creation subdirectories under "targets".
-                Auxiliary.folder_2lev( folder )
-                
-                ## Get index of pointer.
-                name, extens = pathpointer.split(os.sep)[-1].split('.')
+        def find_chunk(self, data, name_chunk):
+                """ Finds chunk. """
                 try:
-                        image_index = [k for k, v in CURSOR_NAMEMAP.items() if name == v[1]][0]
-                except:
-                        logger.write('\n !!! Cursor "%s" Skipped --> Have not standard Windows name.\n' %'.'.join([name, extens]))
-                        logger.close()
-                        return comment_list
-                        
-                ## Read data from file.
-                with open(pathpointer, 'rb') as file:
-                        data = file.read()
-        
-                cursor_status = 1  # imposed always 1, not exist status pressed for .ani and .cur.
-                                
-                if extens.lower() == 'cur':
-                        animation_type = 0       ## imposed NONE for .cur.
-                        frame_interval = 1000000 ## imposed Inf for .cur.
+                        pos_chunk = re.search(name_chunk, data).start()
+                        chunk = self.find_value(data, pos_chunk)
+                except AttributeError:
+                        chunk = None
 
-                        curs_readed, log_err = Iconolatry.READER().FromIcoCur( data, rebuild = True )
-                        if log_err == '':
-                                for cur in curs_readed:
-                                        ima, frame_count, image_width, image_height, mouse_x, mouse_y = cur
-                                        
-                                        ## Eventually resize.
-                                        ima = Auxiliary.resize_make( w_res, h_res, [ima] )
-                                        ## Eventually change color.
-                                        ima = Auxiliary.colorize( color, ima[0] )
-                                        ## Save image (conversion .cur --> .png).
-                                        ima.save('%s/img%d-%d_%d.png' %(ORIGINAL_DIR, image_index, cursor_status, frame_count - 1), 'PNG')
-                                        ## Create .conf file.
-                                        with open('%s/img%d-%d.cfg' %(CFG_DIR, image_index, cursor_status), 'w') as cfg:
-                                                cfg.write('%d %d %d %s/img%d-%d_%d.png %d\n' %(image_width, mouse_x, mouse_y, ORIGINAL_DIR, image_index,
-                                                                                               cursor_status, frame_count - 1, frame_interval))
+                return chunk
+
+        def find_inam_iart(self, data):
+                """ Finds 'INAM' and 'IART' chunks values. """
+                inam = self.find_chunk(data, b'INAM')
+                iart = self.find_chunk(data, b'IART')
+                inam = (inam.decode('utf-8') if inam else '')
+                iart = (iart.decode('utf-8') if iart else '')
+
+                return inam, iart
+
+        def find_rate_seq(self, data):
+                """ Finds 'rate' and 'seq ' chunks values. """
+                rate = self.find_chunk(data, b'rate')
+                seq = self.find_chunk(data, b'seq ')
+                seq = ([unpack_from('<L', seq[i : i + 4])[0] for i in range(0, len(seq), 4)] if seq else [])
+                rate = ([self.jiffies2ms(unpack_from('<L', rate[i : i + 4])[0]) for i in range(0, len(rate), 4)] if rate else [])
+
+                return rate, seq
+
+        def convert(self, resized, theme_name):
+                """ Writes `.ani` cursor byte-to-byte. """
+                self.logger.info('<------>< Microsoft `.ani` file creation ><------>\n')
+
+                ## Get parameters from config file.
+                with open(process.config(self.parameters), 'r') as cfg_file:
+                        cfg_data = cfg_file.readlines()
+                cfg_data = [line.replace('\n', '') for line in cfg_data]
+
+                ## Define global data for 'anih'.
+                anih_size, cb_size = (self.int2byte(36) for _ in range(2))
+
+                stored_as_cur = True
+                if stored_as_cur:
+                        # these fields contain zeroes if the images are
+                        # stored in icon or cursor resources.
+                        iwidth, iheight, ibitcount, nplanes = (self.int2byte(0) for _ in range(4))
+                else:
+                        # these fields contain non-zero values if images are
+                        # stored as raw bitmaps.
+                        iwidth          = self.int2byte(resized[0])
+                        iheight         = self.int2byte(resized[1])
+                        ibitcount       = self.int2byte(32)
+                        nplanes         = self.int2byte(1)
+
+                ## Define remaining data for 'anih'.
+                path_list, rate_list, seq_list = ([] for _ in range(3))
+                for line in cfg_data:
+                        path, rate = line.split(' ')
+                        path_list.append(path)
+                        rate_list.append(int(rate))
+                        seq = re.search('_(.*).cur', path).group(1)
+                        seq_list.append(int(seq))
+
+                nframes = self.int2byte(self.parameters['count'])
+                nsteps = len(seq_list)
+                steps_unique = self.unique(seq_list)
+                idisprate = self.int2byte(self.ms2jiffies(self.parameters['interval']))
+
+                if seq_list == steps_unique:
+                        create_chunk_seq = False
+                        bfattributes = self.int2byte(1)
+                else:
+                        create_chunk_seq = True
+                        bfattributes = self.int2byte(3)
+                        if not all(seq in steps_unique for seq in seq_list):
+                                self.logger.warning('Warning: not all frame images are used, this `.ani` could be better optimized')
+
+                create_chunk_rate = (False if all(rate == self.parameters['interval'] for rate in rate_list) else True)
+
+                ## Define data for IART (need even length).
+                iart = self.even(label)
+                iart_size = self.int2byte(len(iart))
+
+                ## Define name of `.ani` file.
+                ani_name = cursor_namemap[self.parameters['index']][1]
+                if self.parameters['status'] == 2:
+                        ani_name += '_pressed'
+
+                # Define data for INAM (need even length).
+                inam = '*' + theme_name + ' (' + ani_name + ')*'
+                inam = self.even(inam)
+                inam_size = self.int2byte(len(inam))
+
+                ## Define size of all tag 'INFO'.
+                ## b'INFO' = 4
+                ## b'IART' + iart_size = 4 + 4 = 8
+                ## b'INAM' + inam_size = 4 + 4 = 8
+                list_size = self.int2byte(4 + len(iart) + 8 + len(inam) + 8)
+
+                ## Start to construct `.ani` header.
+                ani_header =  b'RIFF' + b'\x00\x00\x00\x00' + b'ACON' # 'RIFF' - RIFF size - 'ACON'
+                ani_header += b'LIST' + list_size                     # 'LIST' - LIST size
+                ani_header += b'INFO'                                 # 'INFO'
+                ani_header += b'INAM' + inam_size           + inam    # 'INAM  - INAM size - INAM string
+                ani_header += b'IART' + iart_size           + iart    # 'IART' - IART size - IART string
+                ani_header += b'anih' + anih_size           + cb_size
+                ani_header += nframes + self.int2byte(nsteps) + iwidth + iheight
+                ani_header += ibitcount + nplanes + idisprate + bfattributes
+
+                ## Continue to construct `.ani` header with tags 'rate' and 'seq '.
+                rateseq_size = self.int2byte(nsteps * 4) # 4 byte -> len of DWORD
+                if create_chunk_seq:
+                        ani_header += b'seq ' + rateseq_size
+                        for seq in seq_list:
+                                ani_header += self.int2byte(seq)
+
+                if create_chunk_rate:
+                        ani_header += b'rate' + rateseq_size
+                        for rate in rate_list:
+                                ani_header += self.int2byte(self.ms2jiffies(rate))
+
+                ## Continue to construct `.ani` header with tag 'icon'.
+                ani_header += b'LIST' + b'\x00\x00\x00\x00' + b'fram' # 'LIST' - LIST size - 'fram'
+
+                ## Do process.
+                ani_path = os.path.join(process.outputcurs_dir, ani_name + '.ani')
+                with open(ani_path, 'wb+') as ani_file:
+                        ## Write `.ani` header.
+                        ani_file.write(ani_header)
+                        ## Write 'icon' and his size identifier then data, for all `.cur`s.
+                        for path in self.unique(path_list):
+                                cur_size = self.int2byte(os.path.getsize(path))
+                                ani_file.write(b'icon' + cur_size)
+                                with open(path, 'rb') as cur_file:
+                                        ani_file.write(cur_file.read())
+
+                        ## Fix RIFF size with proper value after writing all `.ani` file.
+                        riff_size = ani_file.tell() - 8
+                        ani_file.seek(4)
+                        ani_file.write(self.int2byte(riff_size))
+                        ## Fix LIST size with proper value after writing all `.cur`s.
+                        ani_file.seek(0)
+                        offset = re.search(b'fram', ani_file.read()).start() - 4
+                        list_size = riff_size - (offset - 4)
+                        ani_file.seek(offset)
+                        ani_file.write(self.int2byte(list_size))
+
+                self.logger.info('{} ----> Done !!\n'.format(ani_path))
+
+
+## _____________________________________
+##| Mixed cursors conversion functions  |--------------------------------------------------------------------------------------------------------------------
+##|_____________________________________|
+##
+
+class Mixed(object):
+        def __init__(self, options):
+                self.options = options
+                self.logger = logging.getLogger('Metamorphosis')
+
+        def adjust(self, image, name):
+                """ Adjusts single image (only resize and recolor) and save. """
+                editor = Editor(self.parameters, self.options)
+                editor.adjust([image], extended = False, custom = name)
+
+        def work(self, result, result_index, seq_value, rate_value, order):
+                """ Works on Iconolatry results. """
+                result = result[result_index]
+
+                if isinstance(result, dict):
+                        self.logger.info('\tData {}:'.format(result_index if result_index.startswith('stream') else 'stream_0'))
+                        for key in result:
+                                subresult = result[key]
+                                if isinstance(subresult, dict):
+                                        if 'warning' in subresult:
+                                                for warn in subresult['warning']:
+                                                        self.logger.warning(warn)
+                                        if 'info' in subresult:
+                                                inf = ', '.join('{} = {}'.format(k, v) for k, v in subresult['info'].items())
+                                                self.logger.info(inf)
+
+                                        self.parameters['hotx'] = subresult['hotspot_x']
+                                        self.parameters['hoty'] = subresult['hotspot_y']
+                                        depth = subresult['depth']
+                                        image_width, image_height = subresult['im_obj'].size
+
+                                        ## Log specific info.
+                                        self.logger.info(u'\t\tImage size: {} x {}\t\tHotspot position: ({}, {})\t\tDepth: {}'
+                                                         .format(image_width, image_height, self.parameters['hotx'], self.parameters['hoty'], depth))
+
+                                        ## Do work.
+                                        name, extension = os.path.splitext(os.path.basename(subresult['saved']))
+                                        entry = (image_width, image_height, depth)
+                                        if entry not in order:
+                                                # order by size and depth.
+                                                order[entry] = (0 if not order else max(order.values()) + 1)
+
+                                        ## Adjust image.
+                                        self.adjust(subresult['im_obj'], ''.join([name, extension]))
+
+                                        ## Create config file.
+                                        self.parameters['custom'] = ("_{:d}".format(order[entry]) if len(result) > 1 else "")
+                                        with open(process.config(self.parameters), 'a') as cfg_file:
+                                                parser = Parser(self.parameters, self.options)
+                                                parser.cfg_writer(cfg_file, seq_value, rate_value, custom = self.parameters['custom'])
+                else:
+                        if isinstance(subresult, list):
+                                for warn in subresult:
+                                        self.logger.warning(warn)
                         else:
-                                logger.write(log_err)
-                                       
-                elif extens.lower() == 'ani':
-                        animation_type = 2  ## imposed LOOP for .ani.
-                                
-                        ## Find 'anih' parameters.
-                        pos_anih = re.search(b'anih', data).start()
-                        frame_count_real, = unpack_from('<L', data[pos_anih + 12 : pos_anih + 16])
-                        frame_count = 1   ## Imposed for resize images of ANIs one by one.
-                        image_width, image_height = unpack_from('<2L', data[pos_anih + 20 : pos_anih + 28])
-                        frame_interval, = unpack_from('<L', data[pos_anih + 40 : pos_anih + 44])
-                        frame_interval = int(0.5 * ceil(2.0 * (int(frame_interval) * (1000/60)))) # converted from jiffies to ms.
+                                self.logger.error(subresult)
 
-                        irates, iseqs = ANICursor.find_rateseq( data )
-                        comment = ANICursor.find_inamiart( data )
-                        comment = str(comment, 'utf-8').replace('\x00','') + ';'
+                return order
+
+        def convert_ani2x11(self, fileMS, theme_name, comments):
+                """ Creates `.png`s from `.ani` or `.cur` cursor, then produces `X11` cursor. """
+                ## Get cursor index.
+                name, extension = os.path.splitext(os.path.basename(fileMS))
+                try:
+                        image_index, = [key for key, value in cursor_namemap.items() if name == value[1]]
+                except:
+                        self.logger.error('Error: have not standard Windows cursor name --> cursor {} skipped\n'.format(''.join([name, extension])))
+                        return (None, comments)
+
+                ## Creation subfolders under `targets` folder.
+                process.create_subfolders(theme_name)
+
+                ## Define parameters.
+                self.parameters = {'index'    : image_index,
+                                   'status'   : 1                       # impose status always "1" (normal), not exist status pressed for `.ani` and `.cur`.
+                                   }
+
+                self.logger.info('<------>< Image Extraction ><------>\n')
+                order = {}
+                ## Work on `.cur` and `.ani`.
+                if extension.lower() == '.cur':
+                        self.parameters.update({'count'    : 1,         # always 1 frame.
+                                                'interval' : 1000000,   # impose "Inf" for `.cur`.
+                                                'anim'     : 0          # impose "NONE" for `.cur`.
+                                                })
+
+                        name = 'img{:d}-{:d}_{:d}'.format(self.parameters['index'], self.parameters['status'], 0)
+
+                        ## Conversion `.cur` --> `.png`
+                        decocur = Iconolatry.Decode([fileMS],
+                                                    paths_image = [process.original_dir],
+                                                    names_image = [name],
+                                                    formats_image = ['.png'],
+                                                    rebuild = True)
+
+                        order = self.work(decocur.all_icocur_readed, fileMS, 0, self.parameters['interval'], order)
+
+                elif extension.lower() == '.ani':
+                        ## Read data from file.
+                        with open(fileMS, 'rb') as file:
+                                data = file.read()
+
+                        ## Find 'anih' parameters.
+                        msani = MSAni(None)
+                        pos_anih = re.search(b'anih', data).start()
+
+                        (nframes, nsteps, iwidth, iheight,
+                         ibitcount, nplanes, idisprate, bfattributes) = unpack_from('<8L', data[pos_anih + 12 : pos_anih + 44])
+                        idisprate = msani.jiffies2ms(idisprate)
+
+                        inam, iart = msani.find_inam_iart(data)
+                        if inam or iart:
+                                comment = inam + iart + ';'
+                                ## Get `.ani` complete comment.
+                                if comment not in comments:
+                                        comments.append(comment)
+
+                        rate, seq = msani.find_rate_seq(data)
+
+                        self.parameters.update({'count'    : nframes,
+                                                'interval' : idisprate,
+                                                'anim'     : 2                  # impose "LOOP" for `.ani`.
+                                                })
 
                         ## Find 'icon' data.
-                        posico = [ ic.start() for ic in re.finditer(b'icon', data) ]
-                        
-                        for ii in range(frame_count_real):
+                        pos_cur = [cur.start() for cur in re.finditer(b'icon', data)]
+                        ## Get images.
+                        streams, names = ([] for _ in range(2))
+                        for indx in range(self.parameters['count']):
+                                names.append('img{:d}-{:d}_{:d}'.format(self.parameters['index'],
+                                                                        self.parameters['status'],
+                                                                        (seq[indx] if seq else indx)))
                                 try:
-                                        curs_readed, log_err = Iconolatry.READER().FromIcoCur( data[posico[j] + 8 : posico[j + 1]], rebuild = True )
+                                        streams.append(data[pos_cur[indx] + 8 : pos_cur[indx + 1]])
                                 except:
-                                        ## To get the last figure. 
-                                        curs_readed, log_err = Iconolatry.READER().FromIcoCur( data[posico[ii] + 8 : len(data)], rebuild = True )
-                                        
-                                if log_err == '':
-                                        for cur in curs_readed:
-                                                ima, _, _, _, mouse_x, mouse_y = cur
-                                                
-                                                ## Eventually resize.
-                                                ima = Auxiliary.resize_make( w_res, h_res, [ima] )
-                                                ## Eventually change color.
-                                                ima = Auxiliary.colorize( color, ima[0] )
-                                                ## Save images (conversion .cur --> .png).
-                                                ima.save('%s/img%d-%d_%d.png' %(ORIGINAL_DIR, image_index, cursor_status,
-                                                                                (iseqs[ii] if iseqs != None else ii)), 'PNG')
-                                else:
-                                        logger.write(log_err)
-                                        
-                                ## Create .conf files.
-                                with open('%s/img%d-%d.cfg' %(CFG_DIR, image_index, cursor_status), 'a') as cfg:
-                                        cfg.write('%d %d %d %s/img%d-%d_%d.png %d\n' %(image_width, mouse_x, mouse_y, ORIGINAL_DIR,
-                                                                                       image_index, cursor_status,
-                                                                                       (iseqs[ii] if iseqs != None else ii),
-                                                                                       (irates[ii] if irates != None else frame_interval)))
-                        ## Re-assign right variable.
-                        frame_count = frame_count_real
-                        ## Get ANI's total comment.
-                        if comment not in comment_list:
-                                comment_list.append(comment)
-                        
-                ## Write into log file general info.
-                logger.write('\nImage #%d:\n\n Status: %u\n Width: %u\n Height: %u\n Frame count: %u\n Frame interval: %u\n Animation type: %u\n \
-Mouse position: (%u,%u)\n' %(image_index, cursor_status, image_width, image_height, frame_count, frame_interval, animation_type, mouse_x, mouse_y))
-                
-                ## Generate X11 cursor.
-                X11Cursor.convert_X11( )
-                
-                return comment_list
+                                        ## Get last image.
+                                        # Any of the blocks ("ACON", "anih", "rate", or "seq ")
+                                        # can appear in any order (so appended at last),
+                                        # so can contain not wanted data.
+                                        last = data[pos_cur[indx] + 8 : len(data)]
+                                        for find in [b'ACON', b'anih', b'rate', b'seq ']:
+                                                if re.search(find, last):
+                                                        pos = re.search(find, last).start()
+                                                        last = data[pos_cur[indx] + 8 : len(data) - len(last) + pos]
+                                        streams.append(last)
 
+                        ## Conversion `.cur` --> `.png`
+                        decocur = Iconolatry.Decode(streams,
+                                                    paths_image = [process.original_dir] * self.parameters['count'],
+                                                    names_image = names,
+                                                    formats_image = ['.png'] * self.parameters['count'],
+                                                    rebuild = True)
 
-        def convert_X11_to_ANI( pathpointer, N, folder, w_res, h_res, color, used_list, comment_list ):
-                """ Gets PNGs from X11 cursor, creates ICOs and then produces ANI cursor. """
+                        ## Log general info.
+                        self.logger.info(u'Image index #{}:\n\n\tStatus: {}\n\tFrame count: {}\n\tFrame steps: {}\n\tFrame interval: {}\n\t\
+Animation type: {}\n\tSequence chunk: {}\n\tRate chunk: {}\n\t'
+                                         .format(self.parameters['index'], self.parameters['status'], self.parameters['count'], nsteps,
+                                                 self.parameters['interval'], self.parameters['anim'], seq, rate))
+
+                        self.parameters['count'] = 1  # impose for resizing images one-by-one.
+                        for indx, stream in enumerate(decocur.all_icocur_readed):
+                                order = self.work(decocur.all_icocur_readed, stream,
+                                                  (seq[indx] if seq else indx),
+                                                  (rate[indx] if rate else self.parameters['interval']),
+                                                  order)
+
+                        self.parameters['count'] = nframes # re-assign for further processing.
+
+                ## Generate (`X11` cursor from `.png`s).
+                ord_val = order.values()
+                if len(ord_val) > 1:
+                        for num in ord_val:
+                                self.parameters['custom'] = "{:d}_{:d}".format(self.parameters['index'], num)
+                                self.logger.info('\nMulti-size / Multi-depth set: {}:'.format(self.parameters['custom']))
+                                gen_instance = process.generate(self.parameters, theme_name)
+                else:
+                        self.parameters['custom'] = ""
+                        gen_instance = process.generate(self.parameters, theme_name)
+
+                return gen_instance, comments
+
+        def convert_x112ani(self, fileX11, theme_name, comments):
+                """ Gets `.png`s from `X11` cursor, then produces `.ani` cursor
+                    (intermediate step is `.cur` creation).
+                """
                 ## https://www.x.org/releases/X11R7.7/doc/man/man3/Xcursor.3.xhtml
 
-                global ORIGINAL_DIR, CFG_DIR, ICOCUR_DIR, CURSOR_NAMEMAP, logger
-                global mouse_x, mouse_y, image_index, cursor_status, frame_count
-
-                ## Create directories.
-                Auxiliary.setup( N )
-
-                ## Creation subdirectories under "targets".
-                Auxiliary.folder_2lev( folder )
-                
-                ## Get index of pointer.
-                name = pathpointer.split(os.sep)[-1]
-                try :
-                        image_index = [k for k, v in CURSOR_NAMEMAP.items() if name == v[2] or name in v[3]][0]
-                        ## To convert only one X11 cursor for type.
-                        if image_index in used_list:
-                                return used_list, comment_list
-                        else:
-                                used_list.append(image_index)
+                ## Get cursor index.
+                name, _ = os.path.splitext(os.path.basename(fileX11))
+                try:
+                        image_index, = [key for key, value in cursor_namemap.items() if name == value[2] or name in value[3]]
                 except:
-                        logger.write('\n !!! Cursor "%s" Skipped --> Have not standard Linux name.\n' %name)
-                        logger.close()
-                        return used_list, comment_list
-                
-                                               
+                        self.logger.error('Error: have not standard Linux cursor name --> cursor {} skipped\n'.format(name))
+                        return (None, comments)
+
+                ## Creation subfolders under `targets` folder.
+                process.create_subfolders(theme_name)
+
                 ## Read data from file.
-                with open(pathpointer, 'rb') as file:
+                with open(fileX11, 'rb') as file:
                         data = file.read()
 
-                cursor_status = 1  # imposed always 1, not exist status pressed for x11.
-                                
-                ## magic / this_header_size / version / ntocs.
-                if data[0:4] == b'Xcur':
-                        vers, ntocs = unpack_from('<2L', data[8:16])
-                        frame_count = 1   ## Imposed for resize images of ANIs one by one.
-                        
-                        ## list_of_tocs -->    type     |               subtype                     |        position          |  
-                        ##                  0xfffe0001  | { 1 (COPYRIGHT), 2 (LICENSE), 3 (OTHER) } |  absolute byte position  |                 
-                        ##                  0xfffd0002  |           nominal dimension               |     of table in file     |
-                        bytpos_ima, bytpos_com = ([] for _ in range(2))
-                        for frame in range(ntocs):
-                                identf = data[16 + frame*12 : 20 + frame*12]
-                                toget = data[24 + frame*12 : 28 + frame*12]
-                                
-                                if identf == b'\x02\x00\xfd\xff':
-                                        bytpos_ima.append(unpack_from('<L', toget)[0])
-                                elif identf == b'\x01\x00\xfe\xff':
-                                        bytpos_com.append(unpack_from('<L', toget)[0])
-                        
-                        ## chunks --> common header fields:
-                        ## header (bytes) |    type    |              subtype                      | version |
-                        ##       20       | 0xfffe0001 | { 1 (COPYRIGHT), 2 (LICENSE), 3 (OTHER) } |    1    |
-                        ##       36       | 0xfffd0002 |         nominal dimension                 |    1    |
-                                        
-                        ## chunks --> additional type-specific fields:
-                        ##
-                        ##                    |           length          |       string           |
-                        ## comment(0xfffe0001)|  byte length UTF-8 string | byte list UTF-8 string |
-                        ##                
-                        ##                    |    width    |    height   |     xhot   |   yhot     | delay  | pixels |
-                        ## image  (0xfffd0002)|   4bytes    |    4bytes   |    4bytes  |  4bytes    | 4bytes | 8bytes |
-                        ##                    | (max 0x7fff)| (max 0x7fff)| (max width)|(max height)| (ms)   | (ARGB) |
+                ## Define parameters.
+                self.parameters = {'index'    : image_index,
+                                   'status'   : 1               # impose status always "1" (normal), not exist status pressed for `X11`.
+                                   }
+                self.logger.info('<------>< Image Extraction ><------>\n')
 
-                        ## Comment.
-                        dictsubtype = {1:'COPYRIGHT: ', 2:'LICENSE: ', 3:'OTHER: '}
-                        comment = ''
-                        for pos in bytpos_com:
-                                identf = data[pos + 4 : pos + 8]
-                                if identf == b'\x01\x00\xfe\xff':
-                                        subtype, = unpack_from('<L', data[pos + 8 : pos + 12])
-                                        if subtype in dictsubtype.keys():
-                                                partial_comment = dictsubtype[subtype]
-                                                
+                ## Get positions.
+                ## magic [0:4]/ header_size [4:8] / version [8:12] / ntocs [12:16].
+                vers, ntocs = unpack_from('<2L', data[8 : 16])
+
+                ## list_of_tocs -->    type     |               subtype                     |        position          |
+                ##                  0xfffe0001  | { 1 (COPYRIGHT), 2 (LICENSE), 3 (OTHER) } |  absolute byte position  |
+                ##                  0xfffd0002  |           nominal dimension               |     of table in file     |
+                pos_images, pos_comments = ([] for _ in range(2))
+                for num in range(ntocs):
+                        offset = num * 12
+                        identify = data[16 + offset : 20 + offset]
+                        get, = unpack_from('<L', data[24 + offset : 28 + offset])
+
+                        if identify == b'\x02\x00\xfd\xff':
+                                pos_images.append(get)
+                        elif identify == b'\x01\x00\xfe\xff':
+                                pos_comments.append(get)
+
+                ## chunks --> common header fields:
+                ## header (bytes) |    type    |              subtype                      | version |
+                ##       20       | 0xfffe0001 | { 1 (COPYRIGHT), 2 (LICENSE), 3 (OTHER) } |    1    |
+                ##       36       | 0xfffd0002 |         nominal dimension                 |    1    |
+
+                ## chunks --> additional type-specific fields:
+                ##
+                ##                    |           length          |       string           |
+                ## comment(0xfffe0001)|  byte length UTF-8 string | byte list UTF-8 string |
+                ##
+                ##                    |    width    |    height   |     xhot   |   yhot     | delay  | pixels |
+                ## image  (0xfffd0002)|   4bytes    |    4bytes   |    4bytes  |  4bytes    | 4bytes | 8bytes |
+                ##                    | (max 0x7fff)| (max 0x7fff)| (max width)|(max height)| (ms)   | (ARGB) |
+
+                ## Get comments.
+                comment = ""
+                subtypes = {1 : 'COPYRIGHT: ',
+                            2 : 'LICENSE: ',
+                            3 : 'OTHER: '}
+                for pos in pos_comments:
+                        identify = data[pos + 4 : pos + 8]
+                        if identify == b'\x01\x00\xfe\xff':
+                                subtype, = unpack_from('<L', data[pos + 8 : pos + 12])
+                                if subtype in subtypes.keys():
                                         lung, = unpack_from('<L', data[pos + 16 : pos + 20])
-                                        partial_comment += str(data[pos + 20 : pos + 20 + lung], 'utf-8')
-                                comment += partial_comment + ','
-                                
-                        ## Image.
-                        for ii, pos in enumerate(bytpos_ima):
-                                identf = data[pos + 4 : pos + 8]
-                                if identf == b'\x02\x00\xfd\xff':
-                                        image_width, image_height, mouse_x, mouse_y, frame_interval_ms = unpack_from('<5L', data[pos + 16 : pos + 36])
-                                        animation_type = (0 if frame_interval_ms > 10000 else 2)
-                                        frame_interval = int(0.5 * ceil(2.0 * (int(frame_interval_ms) / (1000/60)))) ## from ms to jiffies.
-                                
-                                try:
-                                        ima = Image.frombytes('RGBA', (image_width, image_height), data[pos + 36 : pos[ii + 1]], 'raw', 'BGRA', 0, 1)
-                                except:
-                                        ## To get last figure.
-                                        ima = Image.frombytes('RGBA', (image_width, image_height), data[pos + 36 : len(data)], 'raw', 'BGRA', 0, 1)
+                                        comment += subtypes[subtype] + str(data[pos + 20 : pos + 20 + lung], 'utf-8') + ';'
 
-                                ## Eventually resize.
-                                ima = Auxiliary.resize_make( w_res, h_res, [ima] )
-                                ## Eventually change color.
-                                ima = Auxiliary.colorize( color, ima[0] )
-                                ## Save images (conversion x11 --> .png).
-                                ima.save('%s/img%d-%d_%d.png' %(ORIGINAL_DIR, image_index, cursor_status, ii), 'PNG')
+                ## Get total comment.
+                if comment not in comments:
+                        comments.append(comment)
 
-                              
-                        ## Create .conf files.
-                        with open('%s/img%d-%d.cfg' %(CFG_DIR, image_index, cursor_status), 'a') as cfg:
-                                cfg.write('%d\n%d\n' %(frame_count, frame_interval))
-                                cfg.write('%d\n%d\n' %(mouse_x, mouse_y))
-                                for ii in range(len(bytpos_ima)):
-                                        cfg.write('%s/img%d-%d_%d.ico %d\n' %(ICOCUR_DIR, image_index, cursor_status, ii, frame_interval))
-                                        
-                ## Assign correct value of frame count.                        
-                frame_count = len(bytpos_ima)                             
-                ## Get x11's total comment.
-                if comment not in comment_list:
-                        comment_list.append(comment)
-                        
-                ## Write into log file general info.
-                logger.write('\nImage #%d:\n\n Status: %u\n Width: %u\n Height: %u\n Frame count: %u\n Frame interval: %u\n Animation type: %u\n \
-Mouse position: (%u,%u)\n' %(image_index, cursor_status, image_width, image_height, frame_count, frame_interval_ms, animation_type, mouse_x, mouse_y))
+                ## Get images.
+                msani = MSAni(None)
+                self.parameters.update({'count' : len(pos_images),
+                                        'anim'  : (0 if len(pos_images) == 1 else 2)
+                                        })
+                ## Log general info.
+                self.logger.info(u'Image index #{}:\n\n\tStatus: {}\n\tFrame count: {}\n\tAnimation type: {}\n\n'
+                                 .format(self.parameters['index'], self.parameters['status'], self.parameters['count'], self.parameters['anim']))
 
-                ## Conversion .png --> .ico --> .ani
-                Icon.convert( )
-                ANICursor.convert_ANI( image_width, image_height, folder )
-                ## Partial clean.
-                Main.clean_all( remove_all = False )
-             
-                return used_list, comment_list
+                self.parameters['count'] = 1 # impose for resizing images one-by-one.
+
+                for i, pos in enumerate(pos_images):
+                        identify = data[pos + 4 : pos + 8]
+                        if identify == b'\x02\x00\xfd\xff':
+                                image_width, image_height, mouse_x, mouse_y, frame_interval_ms = unpack_from('<5L', data[pos + 16 : pos + 36])
+                                frame_interval = msani.ms2jiffies(frame_interval_ms)
+
+                                self.parameters.update({'hotx'     : mouse_x,
+                                                        'hoty'     : mouse_y,
+                                                        'interval' : frame_interval
+                                                        })
+
+                        try:
+                                image = Image.frombytes('RGBA', (image_width, image_height), data[pos + 36 : pos_images[i + 1]], 'raw', 'BGRA', 0, 1)
+                        except:
+                                # get last.
+                                image = Image.frombytes('RGBA', (image_width, image_height), data[pos + 36 : len(data)], 'raw', 'BGRA', 0, 1)
+
+                        ## Log specific info.
+                        self.logger.info(u'\tData {}:\n\t\tFrame Interval: {}\t\t Image size: {} x {}\t\tHotspot position: ({}, {})'
+                                         .format('stream_{:d}'.format(i), frame_interval_ms, image_width, image_height,
+                                                 self.parameters['hotx'], self.parameters['hoty']))
+
+                        ## Adjust image.
+                        self.adjust(image, "img{:d}-{:d}_{:d}.png".format(self.parameters['index'], self.parameters['status'], i))
+
+                self.parameters['count'] = len(pos_images) # re-assign for further processing.
+
+                ## Use default animation.
+                with open(process.config(self.parameters), 'w') as cfg_file:
+                        parser = Parser(self.parameters, self.options)
+                        parser.animation(cfg_file)
+
+                ## Generate.
+                gen_instance = process.generate(self.parameters, theme_name)
+
+                return gen_instance, comments
 
 
-## _______
-##| Main  |------------------------------------------------------------------------------------------------------------------------------------------------
-##|_______|
+## ____________________
+##| Process functions  |-------------------------------------------------------------------------------------------------------------------------------------
+##|____________________|
 ##
-class Main(object):
-        
-        def choice( message, list_of_choice ):
-                """ Gets user-defined parameters. """
-                while True:
-                        varchoice = input('%s %s:\n' %(message, '['+ ' - '.join(list_of_choice) +']'))
-                        if varchoice in list_of_choice:
-                                break
-                        else:
-                                print ('??? Insert correctly...')
-                return varchoice
 
-        def check_magic( path, file ):
-                """ Checks if file is X11 cursor. """
-                path_file = os.path.join(path, file)
-                magic = Popen(['file', path_file], stdout = PIPE).communicate()[0].strip().decode('utf-8').split(': ')[1]
-                if magic == 'X11 cursor':
-                        return True
-                else:
-                        return False
+class Process(object):
+        def __init__(self, options):
+                self.options = options
 
-        def clean_all( remove_all = True ):
-                """ Deletes used files after processing. """
-                global OUTPUT_BASE_DIR, CFG_DIR, ORIGINAL_DIR, ICOCUR_DIR
-                
-                rmtree(ORIGINAL_DIR, onerror = Auxiliary.remove_readonly)
-                rmtree(CFG_DIR, onerror = Auxiliary.remove_readonly)
-                rmtree(ICOCUR_DIR, onerror = Auxiliary.remove_readonly)
-                if remove_all:
-                        rmtree(OUTPUT_BASE_DIR, onerror = Auxiliary.remove_readonly)
-                
-        def process_setup( ):
-                """ Creates initial parameters for process. """
-                nproc, old_nproc, nproc_sub, old_nproc_sub = (0 for _ in range(4))
-                old_folder = ''
-                times_sub, comment_list, used_list, flag_glb = ([] for _ in range(4))
-                flag_compl = True
-                is_folder = (False, False)
-                return nproc, old_nproc, nproc_sub, old_nproc_sub, is_folder, old_folder, times_sub, flag_compl, comment_list, used_list, flag_glb
-        
-        def process_time( atime ):
-                """ To format process time. """
-                minutes, seconds = divmod(atime, 60)
+        def find_magic(self, path):
+                """ Checks if a file is `.ani`, `.cur` or `X11` cursor. """
+                is_cur, is_ani, is_x11 = (False for _ in range(3))
+                with open(path, 'rb') as file:
+                        data = file.read()[0:12]
+
+                if data[0:4] == b'\x00\x00\x02\x00':
+                        is_cur = True
+                elif (data[0:4] == b'RIFF') and (data[8:12] == b'ACON'):
+                        is_ani = True
+                elif data[0:4] == b'Xcur':
+                        is_x11 = True
+
+                return (is_cur, is_ani, is_x11)
+
+        def remove_readonly(self, func, path, excinfo):
+                """ Removes read-only permission. """
+                os.chmod(path, S_IWRITE)
+                func(path)
+
+        def clean(self, redo = True):
+                """ Deletes job temp folders."""
+                if not ((self.is_folder_anicur is True) or (self.is_folder_x11 is True)):
+                        try:
+                                rmtree(self.temp_dir, onerror = self.remove_readonly)
+                        except OSError:
+                                pass
+                        if redo:
+                                os.makedirs(self.temp_dir, exist_ok = True)
+
+        def handle_time(self, time, done = 0):
+                """ Formats process time. """
+                minutes, seconds = divmod(time, 60)
                 hours, minutes = divmod(minutes, 60)
-                return hours, minutes, seconds
-
-        def process_headernum( number ):
-                """ Prints number of process. """
-                n0 = ' ██████╗\n██╔═████╗\n██║██╔██║\n████╔╝██║\n╚██████╔╝\n ╚═════╝'
-                n1 = ' ██╗\n███║\n╚██║\n ██║\n ██║\n ╚═╝'
-                n2 = '██████╗\n╚════██╗\n █████╔╝\n██╔═══╝\n███████╗\n╚══════╝'
-                n3 = '██████╗\n╚════██╗\n █████╔╝\n ╚═══██╗\n██████╔╝\n╚═════╝'
-                n4 = '██╗  ██╗\n██║  ██║\n███████║\n╚════██║\n     ██║\n     ╚═╝'
-                n5 = '███████╗\n██╔════╝\n███████╗\n╚════██║\n███████║\n╚══════╝'
-                n6 = ' ██████╗\n██╔════╝\n███████╗\n██╔═══██╗\n╚██████╔╝\n ╚═════╝'
-                n7 = '███████╗\n╚════██║\n    ██╔╝\n   ██╔╝\n   ██║\n   ╚═╝'
-                n8 = ' █████╗\n██╔══██╗\n╚█████╔╝\n██╔══██╗\n╚█████╔╝\n ╚════╝'
-                n9 = ' █████╗\n██╔══██╗\n╚██████║\n ╚═══██║\n █████╔╝\n ╚════╝'
-                np = '\n\n\n\n██╗\n╚═╝'
-
-
-                dict_header = {'0':n0, '1':n1, '2':n2, '3':n3, '4':n4, '5':n5, '6':n6, '7':n7, '8':n8, '9':n9, '.':np}
-                digits = list(str(number))
-
+                if not done:
+                        print('{} Process{}#{:d}:{}complete in {:d}:{:02d}:{:02d}'.format(self.larrw, self.blank, self.nproc, self.blank,
+                                                                                            hours, minutes, seconds))
+                else:
+                        print('{} Process{}#{:d}:{}complete in {:d}:{:02d}:{:02d}. Converted {:d}/{:d}.'.format(self.larrw, self.blank,
+                                                                                                                self.nproc - 1, self.blank,
+                                                                                                                hours, minutes, seconds,
+                                                                                                                done, self.nsubproc))
+        def handle_header(self, num):
+                """ Prints process number. """
+                dict_header = {'0' : ' ██████╗\n██╔═████╗\n██║██╔██║\n████╔╝██║\n╚██████╔╝\n ╚═════╝',
+                               '1' : ' ██╗\n███║\n╚██║\n ██║\n ██║\n ╚═╝',
+                               '2' : '██████╗\n╚════██╗\n █████╔╝\n██╔═══╝\n███████╗\n╚══════╝',
+                               '3' : '██████╗\n╚════██╗\n █████╔╝\n ╚═══██╗\n██████╔╝\n╚═════╝',
+                               '4' : '██╗  ██╗\n██║  ██║\n███████║\n╚════██║\n     ██║\n     ╚═╝',
+                               '5' : '███████╗\n██╔════╝\n███████╗\n╚════██║\n███████║\n╚══════╝',
+                               '6' : ' ██████╗\n██╔════╝\n███████╗\n██╔═══██╗\n╚██████╔╝\n ╚═════╝',
+                               '7' : '███████╗\n╚════██║\n    ██╔╝\n   ██╔╝\n   ██║\n   ╚═╝',
+                               '8' : ' █████╗\n██╔══██╗\n╚█████╔╝\n██╔══██╗\n╚█████╔╝\n ╚════╝',
+                               '9' : ' █████╗\n██╔══██╗\n╚██████║\n ╚═══██║\n █████╔╝\n ╚════╝',
+                               '.' : '\n\n\n\n██╗\n╚═╝'}
+                digits = list(str(num))
                 lung = len(digits)
-                asciiart_number = []
+                asciiart_num = []
                 if lung > 1:
-                        allchunks = [ dict_header[digit].split('\n') for digit in digits ]
+                        allchunks = [dict_header[digit].split('\n') for digit in digits]
 
                         for items in zip(*allchunks):
                                 obj = ''
@@ -1564,186 +1483,335 @@ class Main(object):
                                                 obj += item + '\t\t'
                                         else:
                                                 obj += item + '\t'
-                                asciiart_number.append(obj)                                        
-                        asciiart_number = '\n'.join(asciiart_number)
+                                asciiart_num.append(obj)
+                        asciiart_num = '\n'.join(asciiart_num)
                 else:
-                        asciiart_number = dict_header[str(number)]
-                asciiart_number = '\n' + asciiart_number + '\n#################################################\n\n'
-                return asciiart_number
+                        asciiart_num = dict_header[str(num)]
+                asciiart_num = '\n' + asciiart_num + '\n' + '#' * 50 + '\n\n'
 
-                
-        def process_folder( filename, folder, old_folder, nproc, old_nproc, nproc_sub, old_nproc_sub, is_something, platf_distrib ):
-                """ Creates messages during process. """
-                flag_compl = True
-                                
-                if folder != old_folder:
-                        print('---> Start Processing #%d: %s <---' %(nproc, folder + ' folder'))
-                        old_folder = folder
-                        
-                        if nproc_sub == 0:
-                                nproc_sub += 1
-                                print('---> Start Processing #%d.%d: %s <---' %(nproc, nproc_sub, filename))
-                                if (platf_distrib == 'Windows' and is_something[0]) or (platf_distrib == 'Linux' and is_something[1]):
-                                        ## Not-operation to convert .ani/.cur into .ani/.cur. OR to convert x11 into x11.
-                                        print('---> Process #%d.%d Abort, Conversion Not Needed <---' %(nproc, nproc_sub))
-                                        flag_compl = False
-                                                                                
-                        old_nproc_sub = nproc_sub     
-                        old_nproc = nproc
-                        nproc += 1
-                        nproc_sub = 0
+                return asciiart_num
+
+        def handle_folders(self, file, platform):
+                """ Creates messages on input folders processing. """
+                if self.folder_name != self.old_folder_name:
+                        self.nsubproc = 0
+                        print('{} Start Processing #{:d}:{}`{}` folder'.format(self.larrw, self.nproc, self.blank, self.folder_name))
+                        self.old_folder_name = self.folder_name
+                        self.nsubproc += 1
+                        print('{} Start Processing #{:d}.{:d}:{}`{}`'.format(self.larrw, self.nproc, self.nsubproc, self.blank, file))
+                        self.nproc += 1
                 else:
-                        old_nproc_sub += 1
-                        print('---> Start Processing #%d.%d: %s <---' %(old_nproc, old_nproc_sub, filename))
-                        if (platf_distrib == 'Windows' and is_something[0]) or (platf_distrib == 'Linux' and is_something[1]):
-                                ## Not-operation to convert .ani/.cur into .ani/.cur.
-                                print('---> Process #%d.%d Abort, Conversion Not Needed <---' %(old_nproc, old_nproc_sub))
-                                flag_compl = False
-                                
-                return old_folder, nproc, old_nproc, nproc_sub, old_nproc_sub, flag_compl
-        
+                        self.nsubproc += 1
+                        print('{} Start Processing #{:d}.{:d}:{}`{}`'.format(self.larrw, self.nproc - 1, self.nsubproc, self.blank, file))
 
-        def process_complete( themnam, typeplatf, *args ):
-                """ Completes process."""
-                if typeplatf == 'Linux':
-                        X11Cursor.pack_X11( themnam, args[0] )
-                elif typeplatf == 'Windows':
-                        Icon.convert( )
-                        ANICursor.convert_ANI( args[1], args[2], themnam )
-                        ANICursor.pack_ANI( themnam, args[0] )
-                Main.clean_all( remove_all = True )
-                
+        def create_folders(self):
+                """ Creates job temp folders. """
+                self.original_dir   = os.path.join(self.temp_dir, 'originals')
+                self.cfg_dir        = os.path.join(self.temp_dir, 'cfgs')
+                self.icocur_dir     = os.path.join(self.temp_dir, 'icocurs')
+                for path in [self.original_dir, self.cfg_dir, self.icocur_dir]:
+                        os.makedirs(path, exist_ok = True)
 
-        def process_filenames( filenames, dirpath ):
-                """ Removes duplicates and checks extensions of files. """     
-                filenames.sort()
-                ## Remove name duplicates.
-                for grp_name, grp_files in groupby(filenames, lambda f: os.path.splitext(f)[0]):
-                        dupli = list(grp_files)
-                        if len(dupli) > 1:
-                                filenames.remove(dupli[0])
-                                print('!!! Duplicate File ---> File "%s" will not be converted.\n' %dupli[0])
-                                
-                ## Check extensions.
-                filenames = [ file for file in filenames if file.lower().endswith(tuple(['.cursorfx', '.curxptheme', '.ani', '.cur']))
-                              or Main.check_magic(dirpath, file) ]
-                
-                return filenames
+        def create_subfolders(self, theme_name):
+                """ Creates output folders. """
+                if self.options['pack']:
+                        self.targets_dir    = os.path.join(self.temp_dir, 'targets')
+                        self.output_dir     = os.path.join(self.targets_dir, theme_name)
+                        os.makedirs(self.targets_dir, exist_ok = True)
+                else:
+                        self.output_dir = os.path.join(self.options['output'], theme_name)
 
-                              
-        def main( ):
-                """ Main Process. """
-                global TMP_DIR, ROOT_DIR
+                self.outputcurs_dir = os.path.join(self.output_dir, 'cursors')
+                for path in [self.output_dir, self.outputcurs_dir]:
+                        os.makedirs(path, exist_ok = True)
 
-                ## Path root.
-                ## Linux -->   /home/User/Metamorphosis
-                ## Windows --> C:\\Users\\User\\Metamorphosis
-                ROOT_DIR = os.path.normpath(os.path.expanduser('~'+ os.sep + 'Metamorphosis'))
-                if ROOT_DIR.startswith('\\'):
-                        ROOT_DIR = 'C:' + ROOT_DIR
-                if not os.path.isdir(ROOT_DIR):
-                        print('ROOT folder not exists --> Create "Metamorphosis" folder')
-                        return
-                                       
-                ## Path of jobs directory.
-                TMP_DIR = os.path.join(ROOT_DIR, 'conversion')
-                ## Path of folder with files to convert.
-                FILE_DIR = os.path.join(ROOT_DIR, 'curs2conv')
-                if not os.path.isdir(FILE_DIR):
-                        print('FILE folder not exists --> Create sub-folder "curs2conv"')
-                        return
-                
-                ## Define width and heigth.
-                sz = Main.choice( 'Select size of converted cursors:', ['16','24','32','48','64','96'] )
-                width = height = int(sz)
-                ## Define color.
-                color = Main.choice( 'Select color variation of converted cursors:', ['rgb','rbg','grb','brg','gbr','bgr'] )
-                ## Define distribute platform.
-                platf_distrib = Main.choice( 'Select OS where use converted cursors:', ['Linux','Windows'] )
-                
-                ## Do conversion.
-                (nproc, old_nproc,
-                nproc_sub, old_nproc_sub,
-                is_folder, old_folder,
-                times_sub, flag_compl,
-                comment_list, used_list, flag_glb) = Main.process_setup( )
-                
-                print('---> Metamorphosis working... <---\n')
-               
-                for dirpath, dirnames, filenames in os.walk(FILE_DIR):
-                        filenames = Main.process_filenames( filenames, dirpath )
-                        
-                        for filename in filenames:
-                                                       
-                                path_file = os.path.join(dirpath, filename)
-                                folder = dirpath.split('/')[-1]
-                                tic = perf_counter()
-                                
-                                if filename.lower().endswith('.cursorfx'):
-                                        print('---> Start Processing #%d: %s <---' %(nproc, filename))
-                                        StardockCursor.convert_FX( path_file, nproc, width, height, platf_distrib, color )
-                                                                                                                
-                                elif filename.lower().endswith('.curxptheme'):
-                                        print('---> Start Processing #%d: %s <---' %(nproc, filename))
-                                        StardockCursor.convert_XP( path_file, nproc, width, height, platf_distrib, color )
-                                                                                
-                                elif filename.lower().endswith(tuple(['.ani', '.cur'])):
-                                        is_folder = (True, False)
-                                        old_folder, nproc, old_nproc, nproc_sub, old_nproc_sub, flag_compl = Main.process_folder( filename, folder, old_folder,
-                                                                                                                                  nproc, old_nproc,
-                                                                                                                                  nproc_sub, old_nproc_sub,
-                                                                                                                                  is_folder, platf_distrib )
-                                        flag_glb.append(flag_compl)
-                                        if platf_distrib == 'Linux' and flag_compl:
-                                                float_proc = float('%d.%d' %(old_nproc, old_nproc_sub))
-                                                comment_list = Utility.convert_ANI_to_X11( path_file, float_proc, folder,
-                                                                                           width, height, color, comment_list )
-                                                ## Get sub-process times.
-                                                toc = perf_counter()
-                                                times_sub.append(ceil(toc - tic))
-                                                
+        def create_log(self):
+                """ Creates logging file. """
+                logname = os.path.join(self.options['output'], 'Metamorphosis.log')
+
+                if os.path.exists(logname):
+                        os.remove(logname)
+                self.logger = logging.getLogger('Metamorphosis')
+                formatter = logging.Formatter('%(message)s')
+                filehandler = logging.FileHandler(logname, mode = 'a')
+                filehandler.setFormatter(formatter)
+                self.logger.setLevel(logging.INFO)
+                self.logger.addHandler(filehandler)
+
+        def abort_proc(self, to_process, msg, add = ''):
+                """ Aborts processing (file/s). """
+                print('{} Start Processing #{:d}:{}`{}` {}'.format(self.larrw, self.nproc, self.blank, to_process, add))
+                print('{} Process{}#{:d}:{}aborted, {}.'.format(self.larrw, self.blank, self.nproc, self.blank, msg))
+                self.nproc += 1
+
+        def abort_subproc(self, file, msg):
+                """ Aborts subprocessing (file/s folder/s). """
+                self.handle_folders(file, self.options['platform'])
+                print('{} Process{}#{:d}.{:d}:{}aborted, {}.'.format(self.larrw, self.blank, self.nproc - 1, self.nsubproc, self.blank, msg))
+
+        def finish(self, file):
+                """ Ends processing current input. """
+                print('{} Finished Input      #{:d}:{}`{}`'.format(self.sarrw, self.nfold, self.blank, file))
+                self.nfold += 1
+
+        def generate(self, parameters, theme_name):
+                """ Generates `X11` / `.ani` cursor from current image. """
+                if self.options['platform'] == 'Linux':
+                        ## Generate `X11` (Linux).
+                        gen_instance = X11Cur(parameters)
+                        gen_instance.convert()
+                elif self.options['platform'] == 'Windows':
+                        ## Generate `.ani` (Windows).
+                        MSCur(parameters).convert()
+                        gen_instance = MSAni(parameters)
+                        gen_instance.convert(self.options['size'], theme_name)
+
+                return gen_instance
+
+        def packing(self, instance, theme_name, comment):
+                """ Creates cursor pack archive. """
+                if self.options['pack']:
+                        if self.options['platform'] in ['Linux', 'Windows']:
+                                instance.pack(theme_name, comment)
+                else:
+                        if self.options['platform'] == 'Linux':
+                                instance.theme_file(theme_name, comment)
+                        elif self.options['platform'] == 'Windows':
+                                instance.inf_file(theme_name, comment)
+
+        def config(self, parameters):
+                """ Defines configuration file path. """
+                try:
+                        if len(parameters['custom']) == 3:
+                                custom = parameters['custom'][1:]
+                        elif len(parameters['custom']) == 2:
+                                custom = parameters['custom']
+                        elif len(parameters['custom']) == 0:
+                                custom = "_0"
+
+                        name_cfg = "img{:d}-{:d}{}.cfg".format(parameters['index'], parameters['status'], custom)
+                except:
+                        name_cfg = "img{:d}-{:d}.cfg".format(parameters['index'], parameters['status'])
+
+                return os.path.join(process.cfg_dir, name_cfg)
+
+        def work_setup(self, file):
+                """ Setups global processing operations. """
+                self.clean(redo = True)
+                self.create_folders()
+
+                return (True if file.lower().endswith(('.cursorfx', '.curxptheme')) else False)
+
+        def work_stardock(self, path, file):
+                """ Runs Stardock files processing. """
+                self.is_folder_anicur, self.is_folder_x11 = (False, False)
+                print('{} Start Processing #{:d}:{}`{}`'.format(self.larrw, self.nproc, self.blank, file))
+                self.logger.info(self.handle_header(self.nproc))
+
+                stardock = Stardock(self.options)
+
+                if file.lower().endswith('.cursorfx'):
+                        stardock.convert_FX(path)
+                elif file.lower().endswith('.curxptheme'):
+                        stardock.convert_XP(path)
+
+        def work_anix11_setup(self, file, is_unpaired = True):
+                """ Setups `.ani`, `.cur` or `X11` unpaired / folder(s) file(s) processing operations. """
+                is_continue = False
+                is_cur, is_ani, is_x11 = self.find_magic(file)
+                ## First check: extension ok.
+                if (file.lower().endswith('.cur') and is_cur) or (file.lower().endswith('.ani') and is_ani):
+                        self.is_folder_anicur, self.is_folder_x11 = (True, False)
+                elif is_x11:
+                        self.is_folder_anicur, self.is_folder_x11 = (False, True)
+                else:
+                        self.is_folder_anicur, self.is_folder_x11 = ('?', '?')
+                        msg = 'not a cursor file'
+                        if is_unpaired:
+                                self.abort_proc(file, msg)
+                                self.finish(file)
+                        else:
+                                self.abort_subproc(file, msg)
+                        is_continue = True
+
+                ## Second check:
+                ## Abort conversion `.ani`/`.cur` to `.ani`/`.cur` OR conversion `X11` to `X11`.
+                if not is_continue:
+                        if (self.options['platform'] == 'Windows' and self.is_folder_anicur) \
+                           or (self.options['platform'] == 'Linux' and self.is_folder_x11 ):
+                                self.is_folder_anicur, self.is_folder_x11 = ('?', '?')
+                                msg = 'conversion not needed'
+                                if is_unpaired:
+                                        self.abort_proc(file, msg)
+                                        self.finish(file)
                                 else:
-                                        is_folder = (False, True)
-                                        old_folder, nproc, old_nproc, nproc_sub, old_nproc_sub, flag_compl = Main.process_folder( filename, folder, old_folder,
-                                                                                                                                  nproc, old_nproc,
-                                                                                                                                  nproc_sub, old_nproc_sub,
-                                                                                                                                  is_folder, platf_distrib )
-                                        flag_glb.append(flag_compl)
-                                        if platf_distrib == 'Windows' and flag_compl:
-                                                float_proc = float('%d.%d' %(old_nproc, old_nproc_sub))
-                                                used_list, comment_list = Utility.convert_X11_to_ANI( path_file, float_proc, folder,
-                                                                                                      width, height, color,
-                                                                                                      used_list, comment_list )
-                                                ## Get sub-process times.
-                                                toc = perf_counter()
-                                                times_sub.append(ceil(toc - tic))
-                                                
+                                        self.abort_subproc(file, msg)
+                                is_continue = True
 
-                                ## Get processing time (no folders).   
-                                if times_sub == [] and flag_compl:
-                                        toc = perf_counter()
-                                        hours, minutes, seconds = Main.process_time( ceil(toc - tic) )
-                                        print('---> Process #%d Complete in %d:%02d:%02d <---' %(nproc, hours, minutes, seconds))
-                                        nproc += 1
+                return is_continue
 
-                        ## Complete process (folders).                
-                        if is_folder == (False, True) and (True in flag_glb):
-                                ANICursor.pack_ANI( folder, '\n'.join(comment_list) )
-                                Main.clean_all( remove_all = True )
-                        elif is_folder == (True, False) and (True in flag_glb):
-                                X11Cursor.pack_X11( folder, '\n'.join(comment_list) )
-                                Main.clean_all( remove_all = True )
+        def work_anix11(self, file, theme_name, comments):
+                """ Runs `.ani`, `.cur` or `X11` unpaired / folder(s) file(s) processing. """
+                mixed = Mixed(self.options)
+                if self.options['platform'] == 'Linux':
+                        gen_instance, comments = mixed.convert_ani2x11(file, theme_name, comments)
+                elif self.options['platform'] == 'Windows':
+                        gen_instance, comments = mixed.convert_x112ani(file, theme_name, comments)
 
-                        ## Get processing time (folders).         
-                        if times_sub != []:
-                                hours, minutes, seconds = Main.process_time( sum(times_sub) )
-                                print('---> Process #%d Complete in %d:%02d:%02d <---' %(old_nproc, hours, minutes, seconds))
-                        ## Reset variables for successive loop step.
-                        times_sub, comment_list, used_list, flag_glb = ([] for _ in range(4))
-                                                
-                print("\n---> Metamorphosis finished. <---")
-                                        
-##----------------------------------------------------------------------------------------------------------------------------------------------------------
-if __name__ == 'Metamorphosis':
-        Main.main( )                       
-##----------------------------------------------------------------------------------------------------------------------------------------------------------        
+                return gen_instance, comments
+
+        def main(self):
+                """ Main process. """
+                ## Define conversion job temp path.
+                self.temp_dir = os.path.join(gettempdir(), 'Metamorphosis')
+                ## Define converted stuff output path.
+                self.options['output'] = os.path.abspath(os.path.expanduser(self.options['output']))
+                if self.options['output'].startswith('\\'):
+                        self.options['output'] = 'C:' + self.options['output']
+                os.makedirs(self.options['output'], exist_ok = True)
+
+                ## Create initial variables for process.
+                self.folder_name, self.old_folder_name = ('' for _ in range(2))
+                self.nproc, self.nfold = (0 for _ in range(2))
+                self.is_folder_anicur, self.is_folder_x11 = ('?' for _ in range(2))
+                subtimes, unique, comments = ([] for _ in range(3))
+                self.blank = '\t\t '
+                self.larrw, self.sarrw = ('-' * 6 + '>', '-' * 3 + '>')
+
+                ## Create log file.
+                self.create_log()
+                ## Do conversion.
+                print('\nMetamorphosis working...')
+                for file_dir in self.options['input']:
+                        print('\n{} Processing Input    #{:d}:{}`{}`'.format(self.sarrw, self.nfold, self.blank, file_dir))
+                        if not os.path.exists(file_dir):
+                                print('{} Input{}#{:d}:{}aborted, {}.'.format(self.sarrw, self.blank, self.nfold, self.blank, 'not exist'))
+                                self.finish(file_dir)
+                                continue
+
+                        if os.path.isfile(file_dir):
+                                #######################
+                                # is an unpaired file #
+                                #######################
+                                tic = perf_counter()
+                                self.nproc = self.nfold
+
+                                is_stardock = self.work_setup(file_dir)
+
+                                ## Check duplicate files.
+                                filehash = md5(open(file_dir, 'rb').read()).hexdigest()
+                                if filehash not in unique:
+                                        unique.append(filehash)
+                                else:
+                                        self.abort_proc(file_dir, 'duplicate file found')
+                                        self.finish(file_dir)
+                                        continue
+
+                                if is_stardock:
+                                        self.work_stardock(file_dir, file_dir)
+                                else:
+                                        is_continue = self.work_anix11_setup(file_dir)
+                                        if is_continue:
+                                                continue
+
+                                        self.logger.info(self.handle_header(self.nproc))
+
+                                        self.work_anix11(file_dir, 'Input_' + str(self.nfold), comments)
+
+                                ## Get total process time elapsed (`stardock` or `.ani` or `X11` files).
+                                # Note: `.ani` or `X11` unpaired: no need to pack and create installation files.
+                                toc = perf_counter()
+                                self.handle_time(ceil(toc - tic))
+
+                        else:
+                                #####################
+                                # is a files folder #
+                                #####################
+                                for dirpath, dirnames, filenames in os.walk(file_dir):
+                                        dirpath = os.path.normpath(dirpath)
+                                        numsep = dirpath[len(file_dir):].count(os.path.sep)
+
+                                        if not filenames and not dirnames:
+                                                self.abort_proc(os.path.basename(dirpath), "empty folder", add = 'folder')
+                                                continue
+
+                                        if numsep < 2:
+                                                for filename in filenames:
+                                                        tic = perf_counter()
+                                                        pathfile = os.path.join(dirpath, filename)
+                                                        self.folder_name = os.path.basename(dirpath)
+
+                                                        is_stardock = self.work_setup(filename)
+
+                                                        ## Check duplicate files.
+                                                        filehash = md5(open(pathfile, 'rb').read()).hexdigest()
+                                                        if filehash not in unique:
+                                                                unique.append(filehash)
+                                                        else:
+                                                                msg = 'duplicate file found'
+                                                                if is_stardock:
+                                                                        self.abort_proc(filename, msg)
+                                                                else:
+                                                                        self.abort_subproc(filename, msg)
+                                                                continue
+
+                                                        if is_stardock:
+                                                                if numsep == 0:
+                                                                        self.work_stardock(pathfile, filename)
+                                                                        ## Get total process time elapsed - (`stardock` files).
+                                                                        toc = perf_counter()
+                                                                        self.handle_time(ceil(toc - tic))
+                                                                        self.nproc += 1
+                                                                elif numsep == 1:
+                                                                        self.is_folder_anicur, self.is_folder_x11 = ('?', '?')
+                                                                        self.abort_proc(self.folder_name,
+                                                                                        'take out the stardock cursor(s) from the folder',
+                                                                                        add = 'folder')
+                                                                        continue
+                                                        else:
+                                                                if numsep == 0:
+                                                                        self.is_folder_anicur, self.is_folder_x11 = ('?', '?')
+                                                                        self.abort_proc(self.folder_name,
+                                                                                        'insert `.ani`, `.cur` or `X11` cursor(s) in a folder',
+                                                                                        add = 'folder')
+                                                                        continue
+                                                                elif numsep == 1:
+                                                                        is_continue = self.work_anix11_setup(pathfile, is_unpaired = False)
+                                                                        if is_continue:
+                                                                                continue
+
+                                                                        self.handle_folders(filename, self.options['platform'])
+                                                                        self.logger.info(self.handle_header('{:d}.{:d}'.format(self.nproc - 1, self.nsubproc)))
+
+                                                                        gen_instance, comments = self.work_anix11(pathfile, self.folder_name, comments)
+
+                                                                        ## Get partial subprocess time elapsed - (`.ani`, `.cur` or `X11` folders).
+                                                                        toc = perf_counter()
+                                                                        subtimes.append(ceil(toc - tic))
+
+                                                ## Get total process time elapsed / and eventually packing - (`.ani`, `.cur` or `X11` folders).
+                                                if (self.is_folder_anicur is True) or (self.is_folder_x11 is True):
+                                                        if subtimes:
+                                                                self.handle_time(sum(subtimes), len(subtimes))
+                                                                if gen_instance:
+                                                                        self.packing(gen_instance, self.folder_name, '\n'.join(comments))
+                                                        else:
+                                                                print('{} Process{}#{:d}:{}complete. Converted {:d}/{:d}.'.format(self.larrw, self.blank,
+                                                                                                                                  self.nproc - 1, self.blank,
+                                                                                                                                  0, self.nsubproc))
+                                                ## Reset for next step - (`.ani`, `.cur` or `X11` folders).
+                                                subtimes, comments = ([] for _ in range(2))
+                                        else:
+                                                nested = str(os.path.sep).join(dirpath.split(os.path.sep)[-numsep:])
+                                                self.abort_proc(nested, 'too much nested folder', add = 'folder')
+                        ## Increment.
+                        self.finish(file_dir)
+                ## Complete.
+                self.clean(redo = False)
+                print("\nMetamorphosis finished.")
+
+
+if __name__ == "__main__":
+        options = metamorphosis_parser()
+        process = Process(options)
+        process.main()

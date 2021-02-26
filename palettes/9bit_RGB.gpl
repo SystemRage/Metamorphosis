@@ -1,0 +1,524 @@
+GIMP Palette
+Name: TheOuterLinux - 9-bit RBG
+Columns: 8
+#
+0	0	0	Black
+36	36	36	Dark grey 
+72	72	72	Dark grey 
+109	109	109	Medium grey 
+145	145	145	Grey 
+182	182	182	Silver 
+218	218	218	Silver 
+255	255	255	White
+0	0	0	Black
+0	36	0	Dark forest green 
+0	0	36	Midnight 
+0	36	36	Charcoal 
+0	72	0	Racing green 
+0	109	0	Tree green 
+0	72	36	Pine green 
+0	109	36	Darkish green 
+0	0	72	Night blue 
+0	36	72	Navy 
+0	0	109	Deep blue 
+0	36	109	Night blue 
+0	72	72	Dark teal 
+0	109	72	Spruce 
+0	72	109	Deep sea blue 
+0	109	109	Dark aqua 
+0	145	0	True green 
+0	182	0	Green 
+0	145	36	Irish green 
+0	182	36	Green 
+0	218	0	Vibrant green 
+0	255	0	Fluro green
+0	218	36	Vibrant green 
+0	255	36	Hot green 
+0	145	72	Jungle green 
+0	182	72	Shamrock 
+0	145	109	Viridian 
+0	182	109	Dark mint green 
+0	218	72	Spearmint 
+0	255	72	Bright light green 
+0	218	109	Tealish green 
+0	255	109	Spearmint 
+0	0	145	Indigo blue 
+0	36	145	Sapphire 
+0	0	182	Ultramarine 
+0	36	182	Blurple 
+0	72	145	Cobalt 
+0	109	145	Sea blue 
+0	72	182	Cornflower blue 
+0	109	182	Bluish 
+0	0	218	Ultramarine blue 
+0	36	218	True blue 
+0	0	255	Primary blue 
+0	36	255	Rich blue 
+0	72	218	Azul 
+0	109	218	Dodger blue 
+0	72	255	Electric blue 
+0	109	255	Bright blue 
+0	145	145	Dark cyan 
+0	182	145	Green blue 
+0	145	182	Sea blue 
+0	182	182	Topaz 
+0	218	145	Aqua green 
+0	255	145	Turquoise green 
+0	218	182	Aquamarine 
+0	255	182	Greenish turquoise 
+0	145	218	Water blue 
+0	182	218	Turquoise blue 
+0	145	255	Dodger blue 
+0	182	255	Sky blue 
+0	218	218	Topaz 
+0	255	218	Aqua 
+0	218	255	Neon blue 
+0	255	255	Cyan
+36	0	0	Very dark brown 
+36	36	0	Dark olive 
+36	0	36	Eggplant 
+36	36	36	Dark grey 
+36	72	0	Navy green 
+36	109	0	Tree green 
+36	72	36	Very dark green 
+36	109	36	Deep green 
+36	0	72	Dark indigo 
+36	36	72	Midnight 
+36	0	109	Dark royal blue 
+36	36	109	Night blue 
+36	72	72	Dark teal 
+36	109	72	Spruce 
+36	72	109	Light navy blue 
+36	109	109	Dark turquoise 
+36	145	0	Grass green 
+36	182	0	Green 
+36	145	36	Emerald green 
+36	182	36	Green 
+36	218	0	Vibrant green 
+36	255	0	Neon green 
+36	218	36	Vibrant green 
+36	255	36	Hot green 
+36	145	72	Jungle green 
+36	182	72	Shamrock 
+36	145	109	Ocean green 
+36	182	109	Jade green 
+36	218	72	Green 
+36	255	72	Bright light green 
+36	218	109	Tealish green 
+36	255	109	Spearmint 
+36	0	145	Indigo blue 
+36	36	145	Sapphire 
+36	0	182	Ultramarine 
+36	36	182	Blurple 
+36	72	145	Cobalt 
+36	109	145	Ugly blue 
+36	72	182	Sapphire 
+36	109	182	Mid blue 
+36	0	218	Ultramarine blue 
+36	36	218	True blue 
+36	0	255	Primary blue 
+36	36	255	Rich blue 
+36	72	218	Blue blue 
+36	109	218	Dodger blue 
+36	72	255	Vibrant blue 
+36	109	255	Azul 
+36	145	145	Dark cyan 
+36	182	145	Green blue 
+36	145	182	Sea blue 
+36	182	182	Greenish blue 
+36	218	145	Aqua green 
+36	255	145	Turquoise green 
+36	218	182	Aquamarine 
+36	255	182	Greenish cyan 
+36	145	218	Water blue 
+36	182	218	Teal blue 
+36	145	255	Dodger blue 
+36	182	255	Sky blue 
+36	218	218	Topaz 
+36	255	218	Aqua 
+36	218	255	Neon blue 
+36	255	255	Cyan 
+72	0	0	Mahogany 
+72	36	0	Chocolate 
+72	0	36	Dark plum 
+72	36	36	Purplish brown 
+72	72	0	Green brown 
+72	109	0	Dirty green 
+72	72	36	Dark olive 
+72	109	36	Navy green 
+72	0	72	Deep violet 
+72	36	72	Dirty purple 
+72	0	109	Royal purple 
+72	36	109	Blueberry 
+72	72	72	Dark grey 
+72	109	72	Pine 
+72	72	109	Dusk 
+72	109	109	Dark teal 
+72	145	0	Dark grass green 
+72	182	0	Frog green 
+72	145	36	Dark grass green 
+72	182	36	Apple 
+72	218	0	Green apple 
+72	255	0	Poison green 
+72	218	36	Toxic green 
+72	255	36	Poison green 
+72	145	72	Muted green 
+72	182	72	Medium green 
+72	145	109	Ocean green 
+72	182	109	Seaweed green 
+72	218	72	Green 
+72	255	72	Light neon green 
+72	218	109	Shamrock 
+72	255	109	Light bright green 
+72	0	145	Indigo 
+72	36	145	Indigo 
+72	0	182	Purple/blue 
+72	36	182	Blurple 
+72	72	145	Blueberry 
+72	109	145	Cadet blue 
+72	72	182	Iris 
+72	109	182	French blue 
+72	0	218	Purply blue 
+72	36	218	Purpley blue 
+72	0	255	Strong blue 
+72	36	255	Light royal blue 
+72	72	218	Blue with a hint of purple 
+72	109	218	Cornflower blue 
+72	72	255	Vibrant blue 
+72	109	255	Azul 
+72	145	145	Dark aqua 
+72	182	145	Greeny blue 
+72	145	182	Dirty blue 
+72	182	182	Greenish blue 
+72	218	145	Dark mint green 
+72	255	145	Turquoise green 
+72	218	182	Green blue 
+72	255	182	Greenish cyan 
+72	145	218	Cerulean 
+72	182	218	Lightblue 
+72	145	255	Dodger blue 
+72	182	255	Sky blue 
+72	218	218	Topaz 
+72	255	218	Aqua 
+72	218	255	Neon blue 
+72	255	255	Bright cyan 
+109	0	0	Reddy brown 
+109	36	0	Chestnut 
+109	0	36	Maroon 
+109	36	36	Dried blood 
+109	72	0	Medium brown 
+109	109	0	Browny green 
+109	72	36	Cocoa 
+109	109	36	Olive drab 
+109	0	72	Velvet 
+109	36	72	Plum 
+109	0	109	Darkish purple 
+109	36	109	Plum purple 
+109	72	72	Purplish brown 
+109	109	72	Brown grey 
+109	72	109	Dull purple 
+109	109	109	Medium grey 
+109	145	0	Dark yellow green 
+109	182	0	Dark lime green 
+109	145	36	Mossy green 
+109	182	36	Leaf green 
+109	218	0	Green apple 
+109	255	0	Bright lime green 
+109	218	36	Toxic green 
+109	255	36	Bright lime green 
+109	145	72	Drab green 
+109	182	72	Turtle green 
+109	145	109	Slate green 
+109	182	109	Soft green 
+109	218	72	Fresh green 
+109	255	72	Green apple 
+109	218	109	Medium green 
+109	255	109	Lighter green 
+109	0	145	Purple 
+109	36	145	Royal purple 
+109	0	182	Purple/blue 
+109	36	182	Purpley 
+109	72	145	Deep lavender 
+109	109	145	Grey purple 
+109	72	182	Light indigo 
+109	109	182	Perrywinkle 
+109	0	218	Violet blue 
+109	36	218	Purple/blue 
+109	0	255	Blue/purple 
+109	36	255	Purplish blue 
+109	72	218	Blurple 
+109	109	218	Lavender blue 
+109	72	255	Purpleish blue 
+109	109	255	Warm blue 
+109	145	145	Steel grey 
+109	182	145	Tea 
+109	145	182	Dusty blue 
+109	182	182	Pale teal 
+109	218	145	Dark mint 
+109	255	145	Weird green 
+109	218	182	Greeny blue 
+109	255	182	Light greenish blue 
+109	145	218	Carolina blue 
+109	182	218	Lightblue 
+109	145	255	Soft blue 
+109	182	255	Sky blue 
+109	218	218	Robin's egg 
+109	255	218	Aquamarine 
+109	218	255	Lightblue 
+109	255	255	Bright cyan 
+145	0	0	Blood red 
+145	36	0	Brown red 
+145	0	36	Rouge 
+145	36	36	Dull red 
+145	72	0	Warm brown 
+145	109	0	Muddy brown 
+145	72	36	Chestnut 
+145	109	36	Shit brown 
+145	0	72	Berry 
+145	36	72	Light burgundy 
+145	0	109	Red violet 
+145	36	109	Velvet 
+145	72	72	Light maroon 
+145	109	72	Mocha 
+145	72	109	Light plum 
+145	109	109	Reddish grey 
+145	145	0	Pea soup 
+145	182	0	Booger green 
+145	145	36	Shit green 
+145	182	36	Icky green 
+145	218	0	Kiwi 
+145	255	0	Acid green 
+145	218	36	Kiwi 
+145	255	36	Acid green 
+145	145	72	Khaki 
+145	182	72	Light olive green 
+145	145	109	Stone 
+145	182	109	Light moss green 
+145	218	72	Kermit green 
+145	255	72	Green apple 
+145	218	109	Turtle green 
+145	255	109	Light grass green 
+145	0	145	Barney purple 
+145	36	145	Warm purple 
+145	0	182	Barney 
+145	36	182	Purple 
+145	72	145	Light eggplant 
+145	109	145	Dusty purple 
+145	72	182	Purply 
+145	109	182	Deep lilac 
+145	0	218	Violet 
+145	36	218	Vibrant purple 
+145	0	255	Vivid purple 
+145	36	255	Vivid purple 
+145	72	218	Lightish purple 
+145	109	218	Iris 
+145	72	255	Burple 
+145	109	255	Purpley 
+145	145	145	Grey 
+145	182	145	Greeny grey 
+145	145	182	Greyish purple 
+145	182	182	Cool grey 
+145	218	145	Soft green 
+145	255	145	Baby green 
+145	218	182	Light teal 
+145	255	182	Seafoam 
+145	145	218	Perrywinkle 
+145	182	218	Powder blue 
+145	145	255	Lavender blue 
+145	182	255	Carolina blue 
+145	218	218	Pale cyan 
+145	255	218	Light aqua 
+145	218	255	Lightblue 
+145	255	255	Robin egg blue 
+182	0	0	Darkish red 
+182	36	0	Rust red 
+182	0	36	Lipstick red 
+182	36	36	Carmine 
+182	72	0	Burnt orange 
+182	109	0	Brown orange 
+182	72	36	Terra cotta 
+182	109	36	Raw umber 
+182	0	72	Raspberry 
+182	36	72	Cranberry 
+182	0	109	Magenta 
+182	36	109	Deep magenta 
+182	72	72	Dusty red 
+182	109	72	Adobe 
+182	72	109	Light burgundy 
+182	109	109	Brownish pink 
+182	145	0	Yellow brown 
+182	182	0	Puke yellow 
+182	145	36	Yellowish brown 
+182	182	36	Puke 
+182	218	0	Yellowish green 
+182	255	0	Lemon green 
+182	218	36	Green/yellow 
+182	255	36	Lemon green 
+182	145	72	Camel 
+182	182	72	Vomit 
+182	145	109	Pale brown 
+182	182	109	Khaki 
+182	218	72	Pear 
+182	255	72	Kiwi 
+182	218	109	Light yellow green 
+182	255	109	Light lime 
+182	0	145	Barney purple 
+182	36	145	Red violet 
+182	0	182	Barney 
+182	36	182	Pinkish purple 
+182	72	145	Pale magenta 
+182	109	145	Light plum 
+182	72	182	Pinky purple 
+182	109	182	Orchid 
+182	0	218	Vibrant purple 
+182	36	218	Heliotrope 
+182	0	255	Bright violet 
+182	36	255	Electric purple 
+182	72	218	Bright lilac 
+182	109	218	Amethyst 
+182	72	255	Violet 
+182	109	255	Easter purple 
+182	145	145	Reddish grey 
+182	182	145	Stone 
+182	145	182	Dusty lavender 
+182	182	182	Silver 
+182	218	145	Light grey green 
+182	255	145	Celery 
+182	218	182	Pale teal 
+182	255	182	Light mint 
+182	145	218	Pale purple 
+182	182	218	Light blue grey 
+182	145	255	Liliac 
+182	182	255	Light periwinkle 
+182	218	218	Ice blue 
+182	255	218	Pale turquoise 
+182	218	255	Powder blue 
+182	255	255	Pale cyan 
+218	0	0	Red 
+218	36	0	Reddish orange 
+218	0	36	Scarlet 
+218	36	36	Scarlet 
+218	72	0	Deep orange 
+218	109	0	Pumpkin 
+218	72	36	Rust red 
+218	109	36	Dusty orange 
+218	0	72	Lipstick 
+218	36	72	Rose red 
+218	0	109	Dark hot pink 
+218	36	109	Deep pink 
+218	72	72	Pale red 
+218	109	72	Terra cotta 
+218	72	109	Dark pink 
+218	109	109	Dark salmon 
+218	145	0	Dirty orange 
+218	182	0	Gold 
+218	145	36	Dirty orange 
+218	182	36	Burnt yellow 
+218	218	0	Piss yellow 
+218	255	0	Neon yellow 
+218	218	36	Piss yellow 
+218	255	36	Lime yellow 
+218	145	72	Dull orange 
+218	182	72	Light mustard 
+218	145	109	Clay 
+218	182	109	Sand brown 
+218	218	72	Pastel yellow 
+218	255	72	Yellowy green 
+218	218	109	Manilla 
+218	255	109	Pear 
+218	0	145	Barbie pink 
+218	36	145	Magenta 
+218	0	182	Hot magenta 
+218	36	182	Purpleish pink 
+218	72	145	Magenta 
+218	109	145	Pinky 
+218	72	182	Purpleish pink 
+218	109	182	Pale magenta 
+218	0	218	Purple/pink 
+218	36	218	Purple/pink 
+218	0	255	Hot purple 
+218	36	255	Hot purple 
+218	72	218	Pink purple 
+218	109	218	Purply pink 
+218	72	255	Heliotrope 
+218	109	255	Bright lilac 
+218	145	145	Brownish pink 
+218	182	145	Pale brown 
+218	145	182	Dull pink 
+218	182	182	Pinkish grey 
+218	218	145	Parchment 
+218	255	145	Pistachio 
+218	218	182	Pale 
+218	255	182	Very light green 
+218	145	218	Lavender pink 
+218	182	218	Very light purple 
+218	145	255	Liliac 
+218	182	255	Light violet 
+218	218	218	Silver 
+218	255	218	Very pale green 
+218	218	255	Light blue grey 
+218	255	255	Ice blue 
+255	0	0	Fire engine red 
+255	36	0	Fire engine red 
+255	0	36	Cherry red 
+255	36	36	Cherry red 
+255	72	0	Blood orange 
+255	109	0	Orange 
+255	72	36	Orangey red 
+255	109	36	Deep orange 
+255	0	72	Pinkish red 
+255	36	72	Pinky red 
+255	0	109	Cerise 
+255	36	109	Pink red 
+255	72	72	Light red 
+255	109	72	Pinkish orange 
+255	72	109	Red pink 
+255	109	109	Pastel red 
+255	145	0	Tangerine 
+255	182	0	Amber 
+255	145	36	Tangerine 
+255	182	36	Squash 
+255	218	0	Sunflower yellow
+255	255	0	Yellow 
+255	218	36	Sun yellow 
+255	255	36	Yellow 
+255	145	72	Orangeish 
+255	182	72	Butterscotch 
+255	145	109	Dark peach 
+255	182	109	Apricot 
+255	218	72	Dark yellow 
+255	255	72	Banana yellow 
+255	218	109	Pale gold 
+255	255	109	Pastel yellow 
+255	0	145	Electric pink 
+255	36	145	Hot pink 
+255	0	182	Bright pink 
+255	36	182	Bright pink 
+255	72	145	Darkish pink 
+255	109	145	Rosy pink 
+255	72	182	Barbie pink 
+255	109	182	Bubblegum 
+255	0	218	Fuchsia 
+255	36	218	Hot magenta 
+255	0	255	Pink/purple 
+255	36	255	Pink/purple 
+255	72	218	Candy pink 
+255	109	218	Purpleish pink 
+255	72	255	Pink/purple 
+255	109	255	Light magenta 
+255	145	145	Blush pink 
+255	182	145	Pale salmon 
+255	145	182	Pinky 
+255	182	182	Dusty pink 
+255	218	145	Sand 
+255	255	145	Manilla 
+255	218	182	Light peach 
+255	255	182	Creme
+255	145	218	Bubblegum pink 
+255	182	218	Powder pink 
+255	145	255	Purply pink 
+255	182	255	Light lavendar 
+255	218	218	Pale pink 
+255	255	218	Eggshell 
+255	218	255	Pale mauve 
+255	255	255	White

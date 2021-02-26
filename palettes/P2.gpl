@@ -1,0 +1,8 @@
+GIMP Palette
+Name: BBCMicro_4Colors_GIMP_ColorPalette.gpl
+Columns: 1
+#
+0	0	0	Black
+255	0	0	Fire engine red ~
+255	255	0	Yellow ~
+255	255	255	White

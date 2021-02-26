@@ -7,51 +7,77 @@
 > *The Ultimate Cursor Converter*
 
 ## Why
-After numerous researches, i figured that it doesn't exist a robust tool performing cursors conversions 
-between the various formats.
-
-So inspired by [cfx2xc.py](https://github.com/coolwanglu/cfx2xc/blob/master/cfx2xc.py) and [sd2xc.pl](https://github.com/ludios/sd2xc/blob/master/sd2xc.pl), i decided to create one very cool that works with Windows and Linux.
+After several researches, i come to the conclusion that it doesn't exist a robust tool performing cursors conversions 
+between the different platform formats.
+So inspired by [cfx2xc.py](https://github.com/coolwanglu/cfx2xc/blob/master/cfx2xc.py) and [sd2xc.pl](https://github.com/ludios/sd2xc/blob/master/sd2xc.pl), i decided to create one very cool.
 
 ## Requirements
- - *Python 3.5+*,
- - *PIL (Pillow) 3.3.1+*
- - *xcursorgen*
- - *tar*
- - *[Iconolatry](https://github.com/SystemRage/Iconolatry)*
+ - `Python 3+`,
+ - `PIL (Pillow)`
+ - `xcursorgen`
+ - `tar`
+ - `[Iconolatry](https://github.com/SystemRage/Iconolatry)`
  
 ## Features
-* Extraction of CursorFX / CursorXP theme images and conversion to Linux X11 cursors or Windows ANI cursors.
+* Extraction of `CursorFX` / `CursorXP` theme images and:
+    * Conversion to Linux `X11` or Windows `.ani` cursors.
     * Automatic correction for lazy authors' mistakes.
-    * Detailed info log file creation.
-    * Packaging of cursors converted.
-    * Support for default animations or animations with scripts.
-         * NEW !!! Conversion "repeat" / "end repeat" loops in scripts available.
-    * Allows resizing cursors.
-    * Changes color of cursors.
-    * Support for clicked cursors ( only extraction ).
-    * Creation of *.inf* file for Windows installations.
-* Direct conversion of Windows CUR & ANI cursors to Linux X11 cursors.
-* Direct conversion of Linux X11 cursors to Windows ANI cursors.
+    * Supports default animations or script animations (also with *repeat* / *end repeat* loops).
+    * Supports clicked cursors ( only extraction ).
+
+* Conversion of `.cur` or `.ani` to `X11` cursors.
+* Conversion of `X11` to `.ani` cursors.
+
+* Generic:
+    * Detailed log file creation.
+    * Packaging of converted cursors.
+    * Allows cursors resizing.
+    * Changes cursors color.
+    * Generates installations files for destination platform.
 
 ## Usage
-For Linux users, create this path: *~/home/User/Metamorphosis/curs2conv*.
+`python3 Metamorphosis.py -h` for all available options.
 
-For Windows users, create this path: *C:\\Users\\User\\Metamorphosis\\curs2conv*.
+Conversion to `X11` of an unpaired file and a files folder, packing results as `.tar.gz`:
+`python3 Metamorphosis.py -i /path/to/folder/with/some/cursors -i /path/to/a/specific/cursor/file/Example3.CursorFX -o /path/converted/cursors -t Linux -p` 
 
-Put your cursors in *curs2conv* folder as shown.
+where an example of the directory and file structure is:
+```
+/path/to/folder/with/some/cursors
+│   Example1.CursorFX
+│   Example2.CurXPTheme
+│
+└───folder_with_cur_and_ani_1
+|    │   Help.cur
+|    │   Crosshair.cur
+|    |   Arrow.ani
+|    |   Button.ani
+|
+└───folder_with_cur_and_ani_2
+     |   SizeNS.cur
+     |   SizeS.ani
+     |   SizeWE.ani
+```
 
-![input](https://user-images.githubusercontent.com/25354386/46557884-b6877300-c8eb-11e8-9908-c5873c0e5b93.png)
+Conversion to `.ani` of a files folder, outputting to working directory, resizing and changing original color:
+`python3 Metamorphosis.py -i /path/to/folder/with/some/cursors -t Windows -s 32 -c gbr`
 
-Now run *Metamorphosis.py*, then get cursors converted in *conversion* folder.
-
-![output_lin](https://user-images.githubusercontent.com/25354386/46561231-159eb500-c8f7-11e8-89a3-1df734157de1.png)
-
-![output_win](https://user-images.githubusercontent.com/25354386/46561248-23543a80-c8f7-11e8-84cf-c722b588984c.png)
-
-Enjoy !
+where an example of the directory and file structure is:
+```
+/path/to/folder/with/some/cursors
+│   Example1.CursorFX
+│   Example2.CurXPTheme
+│
+└───folder_with_X11
+     │   top-left-arrow
+     │   progress
+     |   crosshair
+     |   pencil
+```
 
 ## Notes
-Do NOT distribute the converted themes without the permission of the original author.
+- Remember that `.cur`, `.ani` or `X11` must have standard names.
+- Do **NOT** distribute the converted themes without the permission of the original author.
 
 ## License
  [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) ©  Matteo ℱan

@@ -1,0 +1,32 @@
+GIMP Palette
+Name: TheOuterLinux - 3-level RGB
+Columns: 7
+#
+0	0	0	Black
+128	128	128	Medium grey 
+255	255	255	White
+0	128	0	Emerald green 
+0	255	0	Fluro green
+0	0	128	Royal 
+0	128	128	Bluegreen 
+0	255	128	Minty green 
+0	0	255	Primary blue 
+0	128	255	Dodger blue 
+0	255	255	Cyan
+128	0	0	Indian red 
+128	128	0	Shit green 
+128	255	0	Bright lime 
+128	0	128	Darkish purple 
+128	128	128	Medium grey 
+128	255	128	Easter green 
+128	0	255	Blue/purple 
+128	128	255	Periwinkle 
+128	255	255	Robin's egg 
+255	0	0	Fire engine red 
+255	128	0	Pumpkin orange 
+255	255	0	Yellow 
+255	0	128	Strong pink 
+255	128	128	Salmon pink 
+255	255	128	Butter 
+255	0	255	Pink/purple 
+255	128	255	Purply pink 

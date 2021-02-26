@@ -1,0 +1,260 @@
+GIMP Palette
+Name: TheOuterLinux - 8-bit Grayscale
+Columns: 8
+#
+0	0	0	Black
+1	1	1	Black 
+2	2	2	Black 
+3	3	3	Black 
+4	4	4	Black 
+5	5	5	Black 
+6	6	6	Black 
+7	7	7	Black 
+8	8	8	Black 
+9	9	9	Black 
+10	10	10	Black 
+11	11	11	Black 
+12	12	12	Black 
+13	13	13	Black 
+14	14	14	Black 
+15	15	15	Black 
+16	16	16	Black 
+17	17	17	Black 
+18	18	18	Black 
+19	19	19	Almost black 
+20	20	20	Almost black 
+21	21	21	Almost black 
+22	22	22	Almost black 
+23	23	23	Almost black 
+24	24	24	Almost black 
+25	25	25	Almost black 
+26	26	26	Almost black 
+27	27	27	Almost black 
+28	28	28	Almost black 
+29	29	29	Almost black 
+30	30	30	Almost black 
+31	31	31	Almost black 
+32	32	32	Almost black 
+33	33	33	Dark grey 
+34	34	34	Dark grey 
+35	35	35	Dark grey 
+36	36	36	Dark grey 
+37	37	37	Dark grey 
+38	38	38	Dark grey 
+39	39	39	Dark grey 
+40	40	40	Dark grey 
+41	41	41	Dark grey 
+42	42	42	Dark grey 
+43	43	43	Dark grey 
+44	44	44	Dark grey 
+45	45	45	Dark grey 
+46	46	46	Dark grey 
+47	47	47	Dark grey 
+48	48	48	Dark grey 
+49	49	49	Dark grey 
+50	50	50	Dark grey 
+51	51	51	Dark grey 
+52	52	52	Dark grey 
+53	53	53	Dark grey 
+54	54	54	Dark grey 
+55	55	55	Dark grey 
+56	56	56	Dark grey 
+57	57	57	Dark grey 
+58	58	58	Dark grey 
+59	59	59	Dark grey 
+60	60	60	Dark grey 
+61	61	61	Dark grey 
+62	62	62	Dark grey 
+63	63	63	Dark grey 
+64	64	64	Dark grey 
+65	65	65	Dark grey 
+66	66	66	Dark grey 
+67	67	67	Dark grey 
+68	68	68	Dark grey 
+69	69	69	Dark grey 
+70	70	70	Dark grey 
+71	71	71	Dark grey 
+72	72	72	Dark grey 
+73	73	73	Dark grey 
+74	74	74	Charcoal grey 
+75	75	75	Charcoal grey 
+76	76	76	Charcoal grey 
+77	77	77	Charcoal grey 
+78	78	78	Charcoal grey 
+79	79	79	Charcoal grey 
+80	80	80	Charcoal grey 
+81	81	81	Charcoal grey 
+82	82	82	Charcoal grey 
+83	83	83	Charcoal grey 
+84	84	84	Charcoal grey 
+85	85	85	Charcoal grey 
+86	86	86	Charcoal grey 
+87	87	87	Charcoal grey 
+88	88	88	Charcoal grey 
+89	89	89	Charcoal grey 
+90	90	90	Charcoal grey 
+91	91	91	Charcoal grey 
+92	92	92	Charcoal grey 
+93	93	93	Charcoal grey 
+94	94	94	Charcoal grey 
+95	95	95	Charcoal grey 
+96	96	96	Charcoal grey 
+97	97	97	Charcoal grey 
+98	98	98	Charcoal grey 
+99	99	99	Charcoal grey 
+100	100	100	Charcoal grey 
+101	101	101	Charcoal grey 
+102	102	102	Charcoal grey 
+103	103	103	Charcoal grey 
+104	104	104	Medium grey 
+105	105	105	Medium grey 
+106	106	106	Medium grey 
+107	107	107	Medium grey 
+108	108	108	Medium grey 
+109	109	109	Medium grey 
+110	110	110	Medium grey 
+111	111	111	Medium grey 
+112	112	112	Medium grey 
+113	113	113	Medium grey 
+114	114	114	Medium grey 
+115	115	115	Medium grey 
+116	116	116	Medium grey 
+117	117	117	Medium grey 
+118	118	118	Medium grey 
+119	119	119	Medium grey 
+120	120	120	Medium grey 
+121	121	121	Medium grey 
+122	122	122	Medium grey 
+123	123	123	Medium grey 
+124	124	124	Medium grey 
+125	125	125	Medium grey 
+126	126	126	Medium grey 
+127	127	127	Medium grey 
+128	128	128	Medium grey 
+129	129	129	Medium grey 
+130	130	130	Medium grey 
+131	131	131	Medium grey 
+132	132	132	Medium grey 
+133	133	133	Medium grey 
+134	134	134	Medium grey 
+135	135	135	Medium grey 
+136	136	136	Medium grey 
+137	137	137	Medium grey 
+138	138	138	Medium grey 
+139	139	139	Medium grey 
+140	140	140	Medium grey 
+141	141	141	Medium grey 
+142	142	142	Medium grey 
+143	143	143	Medium grey 
+144	144	144	Grey 
+145	145	145	Grey 
+146	146	146	Grey 
+147	147	147	Grey 
+148	148	148	Grey 
+149	149	149	Grey 
+150	150	150	Grey 
+151	151	151	Grey 
+152	152	152	Grey 
+153	153	153	Grey 
+154	154	154	Grey 
+155	155	155	Grey 
+156	156	156	Grey 
+157	157	157	Grey 
+158	158	158	Grey 
+159	159	159	Grey 
+160	160	160	Grey 
+161	161	161	Grey 
+162	162	162	Grey 
+163	163	163	Grey 
+164	164	164	Grey 
+165	165	165	Grey 
+166	166	166	Grey 
+167	167	167	Grey 
+168	168	168	Silver 
+169	169	169	Silver 
+170	170	170	Silver 
+171	171	171	Silver 
+172	172	172	Silver 
+173	173	173	Silver 
+174	174	174	Silver 
+175	175	175	Silver 
+176	176	176	Silver 
+177	177	177	Silver 
+178	178	178	Silver 
+179	179	179	Silver 
+180	180	180	Silver 
+181	181	181	Silver 
+182	182	182	Silver 
+183	183	183	Silver 
+184	184	184	Silver 
+185	185	185	Silver 
+186	186	186	Silver 
+187	187	187	Silver 
+188	188	188	Silver 
+189	189	189	Silver 
+190	190	190	Silver 
+191	191	191	Silver 
+192	192	192	Silver 
+193	193	193	Silver 
+194	194	194	Silver 
+195	195	195	Silver 
+196	196	196	Silver 
+197	197	197	Silver 
+198	198	198	Silver 
+199	199	199	Silver 
+200	200	200	Silver 
+201	201	201	Silver 
+202	202	202	Silver 
+203	203	203	Silver 
+204	204	204	Silver 
+205	205	205	Silver 
+206	206	206	Silver 
+207	207	207	Silver 
+208	208	208	Silver 
+209	209	209	Silver 
+210	210	210	Silver 
+211	211	211	Silver 
+212	212	212	Silver 
+213	213	213	Silver 
+214	214	214	Silver 
+215	215	215	Silver 
+216	216	216	Silver 
+217	217	217	Silver 
+218	218	218	Silver 
+219	219	219	Silver 
+220	220	220	Silver 
+221	221	221	Silver 
+222	222	222	Silver 
+223	223	223	Silver 
+224	224	224	Silver 
+225	225	225	Pale grey 
+226	226	226	Pale grey 
+227	227	227	Pale grey 
+228	228	228	Pale grey 
+229	229	229	Pale grey 
+230	230	230	Pale grey 
+231	231	231	Pale grey 
+232	232	232	Pale grey 
+233	233	233	Pale grey 
+234	234	234	Pale grey 
+235	235	235	Pale grey 
+236	236	236	Pale grey 
+237	237	237	Pale grey 
+238	238	238	Pale grey 
+239	239	239	Pale grey 
+240	240	240	Pale grey 
+241	241	241	Pale grey 
+242	242	242	Pale grey 
+243	243	243	Pale grey 
+244	244	244	Pale grey 
+245	245	245	Pale grey 
+246	246	246	Pale grey 
+247	247	247	Pale grey 
+248	248	248	Pale grey 
+249	249	249	Pale grey 
+250	250	250	Pale grey 
+251	251	251	Pale grey 
+252	252	252	Pale grey 
+253	253	253	White 
+254	254	254	White 
+255	255	255	White
