@@ -264,7 +264,7 @@ class Editor(object):
                 self.parameters = parameters
                 self.options = options
 
-        def resize_meth(self, image, method = Image.ANTIALIAS):
+        def resize_meth(self, image, method = Image.LANCZOS):
                 """ Resizes PIL image to a maximum size specified maintaining the aspect ratio.
                     Allows usage of different resizing methods and does not modify the image in place,
                     then creates an exact square image.
@@ -297,7 +297,7 @@ class Editor(object):
                 scale_x = w_fin / w_ini
                 scale_y = h_fin / h_ini
 
-                image_list = [self.resize_meth(image_list[i], method = Image.ANTIALIAS) for i in range(self.parameters['count'])]
+                image_list = [self.resize_meth(image_list[i], method = Image.LANCZOS) for i in range(self.parameters['count'])]
 
                 ## Scale hotspots.
                 self.parameters['hotx'] = int(0.5 * ceil(2.0 * (self.parameters['hotx'] * scale_x)))
