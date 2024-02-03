@@ -1022,7 +1022,7 @@ class Encode(object):
                 image = self.extract(path_image)
 
                 ## Manage resize.
-                image = self.ico_resize(image, how = self.type_resize, method = Image.ANTIALIAS)
+                image = self.ico_resize(image, how = self.type_resize, method = Image.LANCZOS)
 
                 ## Manage ICC profile.
                 if 'icc_profile' in image.info:
@@ -1220,7 +1220,7 @@ class Encode(object):
                                 temp.append(self.parameters['palette'][i : i + step][::-1] + b'\x00')
                         self.parameters['palette'] = b"".join(temp)
 
-        def ico_resize(self, image, how = 'up256_prop', method = Image.ANTIALIAS):
+        def ico_resize(self, image, how = 'up256_prop', method = Image.LANCZOS):
                 """ Resizes to `.ico` / `.cur` dimensions. """
                 old_w, old_h = image.size
                 sizes = [16, 24, 32, 48, 64, 128, 256]
